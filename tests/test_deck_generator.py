@@ -12,13 +12,13 @@ from ygo_meta.deck_builder.validator import validate_deck
 
 STAPLES_YAML = {
     "handtraps": [
-        {"code": 14558127, "name": "Ash Blossom", "copies_max": 3},
-        {"code": 23434538, "name": "Effect Veiler", "copies_max": 3},
-        {"code": 98095162, "name": "Ghost Ogre", "copies_max": 3},
-        {"code": 40508768, "name": "Ghost Belle", "copies_max": 3},
-        {"code": 27204311, "name": "Nibiru", "copies_max": 3},
-        {"code": 55144522, "name": "Called by the Grave", "copies_max": 3},
-        {"code": 15693423, "name": "Dark Ruler No More", "copies_max": 3},
+        {"code": 14558127, "name": "Ash Blossom & Joyous Spring", "copies_max": 3},
+        {"code": 97268402, "name": "Effect Veiler",               "copies_max": 3},
+        {"code": 59438930, "name": "Ghost Ogre & Snow Rabbit",    "copies_max": 3},
+        {"code": 73642296, "name": "Ghost Belle & Haunted Mansion","copies_max": 3},
+        {"code": 27204311, "name": "Nibiru, the Primal Being",    "copies_max": 3},
+        {"code": 24224830, "name": "Called by the Grave",         "copies_max": 3},
+        {"code": 54693926, "name": "Dark Ruler No More",          "copies_max": 3},
     ]
 }
 

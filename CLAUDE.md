@@ -59,6 +59,16 @@ ruff check src/ tests/
 
 ---
 
+## NEVER Hardcode Card Data
+
+**Never hardcode ATK, DEF, level, attribute, or card type for any card code.**
+`data/card_info.json` has the real stats for every card. Always use `card_from_db()` /
+`load_card_info()` to build Card objects. This applies to demos, tests, scripts — everywhere.
+Wrong hardcoded stats have already caused bugs (Rahu Dracotail shown as ATK 1600 monster,
+Fallen of Albaz with DEF 2000, wrong attributes everywhere). Do not repeat this.
+
+---
+
 ## Behavioral Guidelines (adapted from Karpathy / andrej-karpathy-skills)
 
 ### 1. Think Before Coding
