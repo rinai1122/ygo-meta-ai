@@ -23,9 +23,16 @@ from ygo_meta.deck_builder.validator import validate_deck
 from ygo_meta.deck_builder.ydk_parser import parse_ydk
 
 
-def _load_staple_pool(staples_dir: Path) -> list[dict]:
-    """Load all staple entries from all YAML files in staples_dir."""
-    pool: list[dict] = []
+def _load_staple_pool(staples_dir: Path) -> tuple[list[dict], list[dict]]:
+    """
+    Load staple entries from all YAML files in staples_dir.
+
+    Returns:
+        main_pool:  entries destined for the main deck (all keys except 'extradeck')
+        extra_pool: entries destined for the extra deck (key == 'extradeck')
+    """
+    main_pool: list[dict] = []
+    extra_pool: list[dict] = []
     for yaml_file in sorted(staples_dir.glob("*.yaml")):
         with open(yaml_file, encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -33,8 +40,11 @@ def _load_staple_pool(staples_dir: Path) -> list[dict]:
             continue
         for key, entries in data.items():
             if isinstance(entries, list):
-                pool.extend(entries)
-    return pool
+                if key == "extradeck":
+                    extra_pool.extend(entries)
+                else:
+                    main_pool.extend(entries)
+    return main_pool, extra_pool
 
 
 def _sample_staple_combo(
@@ -93,26 +103,34 @@ def generate_decks(
     """
     rng = random.Random(seed)
     engine_deck = parse_ydk(engine_path)
-    pool = _load_staple_pool(staples_dir)
+    main_pool, extra_pool = _load_staple_pool(staples_dir)
     archetype = engine_deck.archetype
-    available = max(0, target_size - len(engine_deck.main))
+    available_main = max(0, target_size - len(engine_deck.main))
+    available_extra = max(0, 15 - len(engine_deck.extra))
 
     decks: list[Deck] = []
     for i in range(n_variants):
-        if available > 0 and pool:
-            staple_codes, combo = _sample_staple_combo(pool, available, rng)
+        if available_main > 0 and main_pool:
+            staple_codes, combo = _sample_staple_combo(main_pool, available_main, rng)
         else:
             staple_codes, combo = [], {}
 
         main = engine_deck.main + staple_codes
         # If still short (pool exhausted), leave as-is — validator will report it.
 
+        # Fill remaining extra deck slots with generic utility extra deck staples
+        if available_extra > 0 and extra_pool:
+            extra_staples = [e["code"] for e in extra_pool[:available_extra]]
+        else:
+            extra_staples = []
+        extra = (engine_deck.extra + extra_staples)[:15]
+
         variant_id = f"{archetype}_v{i:03d}"
         deck = Deck(
             archetype=archetype,
             variant_id=variant_id,
             main=main[:60],
-            extra=engine_deck.extra[:15],
+            extra=extra,
             side=[],
             staple_combo=combo,
         )

@@ -1,24 +1,83 @@
-# Hand trap staple pool
-# Each entry: code (int), name (str), copies_max (1-3)
-# Card codes must be in vendor/ygo-agent/scripts/code_list.txt
-# Re-run scripts/build_card_db.py after updating the submodule.
+# Hand trap staple pool for main deck (2026.03 MD meta)
+# Format:
+#   code:       card ID — find it via the deck editor search or ygoprodeck.com
+#   name:       for readability only (not used by code)
+#   copies_max: max copies the generator may include per deck (1-3)
+#
+# The generator samples combinations from this pool to fill empty main deck slots.
+# Add or remove entries freely.
 
 handtraps:
   - code: 14558127
     name: "Ash Blossom & Joyous Spring"
     copies_max: 3
-  - code: 23434538
+
+  - code: 97268402
     name: "Effect Veiler"
     copies_max: 3
-  - code: 98095162
+
+  - code: 59438930
     name: "Ghost Ogre & Snow Rabbit"
     copies_max: 2
-  - code: 40508768
+
+  - code: 73642296
     name: "Ghost Belle & Haunted Mansion"
     copies_max: 3
+
   - code: 27204311
     name: "Nibiru, the Primal Being"
     copies_max: 3
-  - code: 24224830
+
+  - code: 94145021
+    name: "Droll & Lock Bird"
+    copies_max: 3
+
+  - code: 24508238
     name: "D.D. Crow"
+    copies_max: 2
+
+  # Mulcharmy series (send to GY when opponent draws/searches during their turn)
+  - code: 42141493
+    name: "Mulcharmy Fuwaross"
+    copies_max: 3
+
+  - code: 84192580
+    name: "Mulcharmy Purulia"
+    copies_max: 3
+
+  # NOTE: Mulcharmy Petiteranodon not yet indexed in YGOPRODeck — add when available
+
+  # Bystials (Special Summon by banishing LIGHT/DARK from either GY; Level 6 DARK Dragon)
+  - code: 6637331
+    name: "Bystial Druiswurm"
+    copies_max: 1    # Limited OCG (≈MD)
+
+  - code: 33854624
+    name: "Bystial Magnamhut"
+    copies_max: 1    # Limited OCG (≈MD)
+
+  - code: 72656408
+    name: "Bystial Baldrake"
+    copies_max: 3
+
+  # NOTE: Bystial Elastikum not yet indexed in YGOPRODeck — add when available
+
+  # Dimension Attractor (while in GY, cards go to Banished instead; Limited OCG)
+  - code: 71315011
+    name: "Dimension Attractor"
+    copies_max: 1    # Limited OCG (≈MD)
+
+  # Artifact Lancea (negate banishing effects when destroyed/sent from hand)
+  - code: 34267821
+    name: "Artifact Lancea"
+    copies_max: 3
+
+  # Maxx "C" (draw 1 each time opponent Special Summons; Limited OCG)
+  - code: 23434538
+    name: "Maxx \"C\""
+    copies_max: 1    # Limited OCG (≈MD)
+
+  # Retaliating "C" (Special Summon from hand when opponent activates spell that removes from GY)
+  - code: 46502744
+    name: "Retaliating \"C\""
     copies_max: 3

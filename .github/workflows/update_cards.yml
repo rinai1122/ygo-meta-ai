@@ -32,7 +32,7 @@ jobs:
       - name: Check for changes
         id: diff
         run: |
-          git diff --quiet data/card_names.json vendor/ygo-agent && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --quiet data/card_names.json data/card_info.json vendor/ygo-agent && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Commit and push if updated
         if: steps.diff.outputs.changed == 'true'
@@ -40,8 +40,8 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage submodule pointer + card database
-          git add vendor/ygo-agent data/card_names.json
+          # Stage submodule pointer + card databases
+          git add vendor/ygo-agent data/card_names.json data/card_info.json
 
           CARD_COUNT=$(python -c "import json; d=json.load(open('data/card_names.json')); print(len(d))")
           YGO_SHA=$(git -C vendor/ygo-agent rev-parse --short HEAD)
