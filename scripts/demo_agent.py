@@ -112,21 +112,22 @@ def scenario_branded_opening() -> tuple[str, Input]:
     Board: empty.
     """
     # Hand cards (controller=0, location=0x02)
-    faimena     = make_card(1498449,  location=0x02, atk=1500, def_=2000, level=4, attribute=0x20)
-    rahu1       = make_card(32548318, location=0x02, atk=1600, def_=1000, level=4, attribute=0x04, sequence=1)
-    rahu2       = make_card(32548318, location=0x02, atk=1600, def_=1000, level=4, attribute=0x04, sequence=2)
-    albaz       = make_card(68468459, location=0x02, atk=1500, def_=2000, level=4, attribute=0x20, sequence=3)
-    ash         = make_card(14558127, location=0x02, atk=0,    def_=1800, level=3, attribute=0x04, sequence=4)
+    # Rahu Dracotail is a Quick-Play Spell: atk=0, def=0, level=0
+    faimena = make_card(1498449,  location=0x02, atk=1500, def_=1200, level=4, attribute=0x20)
+    rahu1   = make_card(32548318, location=0x02, atk=0,    def_=0,    level=0, attribute=0x00, sequence=1)
+    rahu2   = make_card(32548318, location=0x02, atk=0,    def_=0,    level=0, attribute=0x00, sequence=2)
+    # Fallen of Albaz: Level 4 DARK Dragon, ATK 1500 / DEF 0 — no hand-activatable effect
+    albaz   = make_card(68468459, location=0x02, atk=1500, def_=0,    level=4, attribute=0x20, sequence=3)
+    ash     = make_card(14558127, location=0x02, atk=0,    def_=1800, level=3, attribute=0x04, sequence=4)
 
-    dummy = make_card(0)  # code=0 → renders as unnamed (used for phase-change actions)
+    dummy = make_card(0)  # code=0 — used for phase-change actions (no card involved)
     actions = MsgSelectIdleCmd(actions=[
-        IdleAction(card=faimena,  msg=0),  # Normal Summon Dracotail Faimena
-        IdleAction(card=rahu1,    msg=4),  # Set Rahu Dracotail
-        IdleAction(card=albaz,    msg=0),  # Normal Summon Fallen of Albaz
-        IdleAction(card=albaz,    msg=5),  # Activate Fallen of Albaz
-        IdleAction(card=rahu2,    msg=5),  # Activate Rahu Dracotail
-        IdleAction(card=dummy,    msg=6),  # Enter Battle Phase
-        IdleAction(card=dummy,    msg=8),  # End Turn
+        IdleAction(card=faimena, msg=0),  # Normal Summon Dracotail Faimena
+        IdleAction(card=albaz,   msg=0),  # Normal Summon Fallen of Albaz
+        IdleAction(card=rahu1,   msg=4),  # Set Rahu Dracotail (spell/trap)
+        IdleAction(card=rahu2,   msg=5),  # Activate Rahu Dracotail
+        IdleAction(card=dummy,   msg=6),  # Enter Battle Phase
+        IdleAction(card=dummy,   msg=8),  # End Turn
     ])
 
     inp = Input(**{

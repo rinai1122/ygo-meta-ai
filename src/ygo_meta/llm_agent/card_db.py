@@ -12,16 +12,27 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-_DEFAULT_PATH = Path(__file__).parent.parent.parent.parent / "data" / "card_names.json"
+_DEFAULT_NAMES_PATH = Path(__file__).parent.parent.parent.parent / "data" / "card_names.json"
+_DEFAULT_INFO_PATH  = Path(__file__).parent.parent.parent.parent / "data" / "card_info.json"
 
 
 @lru_cache(maxsize=1)
 def load_card_db(path: Path | None = None) -> dict[int, str]:
-    p = path or _DEFAULT_PATH
+    p = path or _DEFAULT_NAMES_PATH
     if not p.exists():
         return {}
     with open(p, encoding="utf-8") as f:
         raw: dict[str, str] = json.load(f)
+    return {int(k): v for k, v in raw.items()}
+
+
+@lru_cache(maxsize=1)
+def load_card_info(path: Path | None = None) -> dict[int, dict]:
+    p = path or _DEFAULT_INFO_PATH
+    if not p.exists():
+        return {}
+    with open(p, encoding="utf-8") as f:
+        raw: dict[str, dict] = json.load(f)
     return {int(k): v for k, v in raw.items()}
 
 
@@ -30,3 +41,11 @@ def get_card_name(code: int, path: Path | None = None) -> str:
         return "unknown"
     db = load_card_db(path)
     return db.get(code, f"#{code}")
+
+
+def get_card_type(code: int) -> str:
+    """Return 'spell', 'trap', or 'monster'. Defaults to 'monster' if unknown."""
+    if code == 0:
+        return "monster"
+    info = load_card_info()
+    return info.get(code, {}).get("card_type", "monster")

@@ -28,7 +28,7 @@ from ygo_meta.engine.types import (
     MsgSelectTribute,
     MsgSelectYesNo,
 )
-from ygo_meta.llm_agent.card_db import get_card_name
+from ygo_meta.llm_agent.card_db import get_card_name, get_card_type
 
 # ---------------------------------------------------------------------------
 # Location / phase / attribute / race constants (from ygopro-core)
@@ -95,17 +95,19 @@ BATTLE_MSG_NAMES = {
 # ---------------------------------------------------------------------------
 
 def _card_str(card: Card, brief: bool = False) -> str:
-    name = f"[{get_card_name(card.code)}]"
     if card.code == 0:
         return "[unknown]"
-    pos = POSITION_NAMES.get(card.position, f"pos={card.position}")
-    atk = card.atk
-    def_ = card.def_
-    attr = ATTRIBUTE_NAMES.get(card.attribute, "?")
-    lv = card.level
+    name = f"[{get_card_name(card.code)}]"
     if brief:
         return name
-    return f"{name} ATK {atk}/DEF {def_} | {pos} | Lv{lv} | {attr}"
+    ctype = get_card_type(card.code)
+    if ctype == "spell":
+        return f"{name} | Spell"
+    if ctype == "trap":
+        return f"{name} | Trap"
+    pos  = POSITION_NAMES.get(card.position, f"pos={card.position}")
+    attr = ATTRIBUTE_NAMES.get(card.attribute, "?")
+    return f"{name} ATK {card.atk}/DEF {card.def_} | {pos} | Lv{card.level} | {attr}"
 
 
 def _phase_str(phase: int) -> str:

@@ -70,14 +70,21 @@ def fetch_all_cards() -> tuple[dict[int, str], dict[str, dict]]:
         ban_raw = card.get("banlist_info", {}).get("ban_ocg")
         ban_ocg = "Forbidden" if ban_raw == "Banned" else ban_raw
 
-        # Extra Deck detection — case-insensitive to handle "XYZ Monster" etc.
+        # Card type classification
         ctype    = card.get("type", "").lower()
         is_extra = any(kw in ctype for kw in _EXTRA_KEYWORDS)
+        if "spell" in ctype:
+            card_type = "spell"
+        elif "trap" in ctype:
+            card_type = "trap"
+        else:
+            card_type = "monster"
 
         entry: dict = {
-            "in_md":    in_md,
-            "ban_ocg":  ban_ocg,
-            "is_extra": is_extra,
+            "in_md":     in_md,
+            "ban_ocg":   ban_ocg,
+            "is_extra":  is_extra,
+            "card_type": card_type,
         }
         info[str(cid)] = entry
 
