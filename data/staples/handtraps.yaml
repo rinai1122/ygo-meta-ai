@@ -1,0 +1,24 @@
+# Hand trap staple pool
+# Each entry: code (int), name (str), copies_max (1-3)
+# Card codes must be in vendor/ygo-agent/scripts/code_list.txt
+# Re-run scripts/build_card_db.py after updating the submodule.
+
+handtraps:
+  - code: 14558127
+    name: "Ash Blossom & Joyous Spring"
+    copies_max: 3
+  - code: 23434538
+    name: "Effect Veiler"
+    copies_max: 3
+  - code: 98095162
+    name: "Ghost Ogre & Snow Rabbit"
+    copies_max: 2
+  - code: 40508768
+    name: "Ghost Belle & Haunted Mansion"
+    copies_max: 3
+  - code: 27204311
+    name: "Nibiru, the Primal Being"
+    copies_max: 3
+  - code: 24224830
+    name: "D.D. Crow"
+    copies_max: 3

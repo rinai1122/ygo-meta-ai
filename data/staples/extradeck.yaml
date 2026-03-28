@@ -1,0 +1,19 @@
+# Extra deck staple pool
+# These are generic utility extra deck monsters usable across archetypes.
+
+extradeck:
+  - code: 10000080
+    name: "Accesscode Talker"
+    copies_max: 1
+  - code: 98095163
+    name: "Apollousa, Bow of the Goddess"
+    copies_max: 1
+  - code: 85219749
+    name: "Knightmare Unicorn"
+    copies_max: 1
+  - code: 73628505
+    name: "Knightmare Phoenix"
+    copies_max: 1
+  - code: 53129443
+    name: "Baronne de Fleur"
+    copies_max: 1

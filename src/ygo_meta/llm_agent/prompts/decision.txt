@@ -1,0 +1,8 @@
+{game_state_block}
+
+{board_block}
+
+=== YOUR OPTIONS ===
+{action_block}
+
+Which action do you choose? Reply with the action number only.

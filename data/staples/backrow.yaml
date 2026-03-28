@@ -1,0 +1,18 @@
+# Backrow (spell/trap) staple pool
+
+backrow:
+  - code: 55144522
+    name: "Called by the Grave"
+    copies_max: 3
+  - code: 27204311
+    name: "Infinite Impermanence"
+    copies_max: 3
+  - code: 15693423
+    name: "Dark Ruler No More"
+    copies_max: 3
+  - code: 44095762
+    name: "Forbidden Droplet"
+    copies_max: 3
+  - code: 81439173
+    name: "Crossout Designator"
+    copies_max: 3

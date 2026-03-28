@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+*.flax_model
+*.tflite
+*.so
+*.yrp
+
+# Generated data
+data/card_names.json
+
+# Results (large binary/json files)
+results/payoff_matrices/*.npy
+results/nash_solutions/*.json
+
+# Build
+dist/
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
