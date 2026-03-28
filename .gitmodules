@@ -1,0 +1,3 @@
+[submodule "vendor/ygo-agent"]
+	path = vendor/ygo-agent
+	url = https://github.com/sbl1996/ygo-agent.git

@@ -9,8 +9,8 @@ venv/
 *.so
 *.yrp
 
-# Generated data
-data/card_names.json
+# card_names.json is committed — regenerate with scripts/build_card_db.py after submodule updates
+# data/card_names.json
 
 # Results (large binary/json files)
 results/payoff_matrices/*.npy
