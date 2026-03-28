@@ -39,6 +39,12 @@ _HEADERS       = {"User-Agent": "ygo-meta-ai/1.0 (github.com/rinai1122/ygo-meta-
 # Card type substrings that indicate an Extra Deck card — checked case-insensitively
 _EXTRA_KEYWORDS = ("fusion", "synchro", "xyz", "link")
 
+# YGOPRODeck attribute string → ygopro-core bitfield integer
+_ATTR_TO_INT = {
+    "EARTH": 0x01, "WATER": 0x02, "FIRE": 0x04,
+    "WIND":  0x08, "LIGHT": 0x10, "DARK": 0x20, "DIVINE": 0x40,
+}
+
 
 def fetch_all_cards() -> tuple[dict[int, str], dict[str, dict]]:
     """
@@ -80,11 +86,21 @@ def fetch_all_cards() -> tuple[dict[int, str], dict[str, dict]]:
         else:
             card_type = "monster"
 
+        # Real card stats (spells/traps have no atk/def/level in the API)
+        atk_val   = card.get("atk")  # int or None
+        def_val   = card.get("def")  # int or None (None for links and spells/traps)
+        level_val = card.get("level") or card.get("rank") or card.get("linkval") or 0
+        attr_val  = _ATTR_TO_INT.get(card.get("attribute", ""), 0)
+
         entry: dict = {
             "in_md":     in_md,
             "ban_ocg":   ban_ocg,
             "is_extra":  is_extra,
             "card_type": card_type,
+            "atk":       atk_val,
+            "def":       def_val,
+            "level":     level_val,
+            "attribute": attr_val,
         }
         info[str(cid)] = entry
 
