@@ -11,9 +11,13 @@ Card names are loaded from data/card_names.json (run build_card_db.py first).
 from __future__ import annotations
 
 import json
+import threading
 import tkinter as tk
+import urllib.request
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+
+YGOPRODECK_URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes"
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -171,6 +175,9 @@ class DeckEditor(tk.Tk):
         ttk.Button(toolbar, text="💾 Save YDK", command=self._save_ydk, style="Accent.TButton").pack(side="left", padx=2)
         ttk.Button(toolbar, text="💾 Save As", command=self._save_ydk_as).pack(side="left", padx=2)
         ttk.Button(toolbar, text="🗑 Clear Deck", command=self._clear_deck).pack(side="left", padx=2)
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", padx=8, fill="y")
+        self._refresh_btn = ttk.Button(toolbar, text="🔄 Update Cards", command=self._refresh_cards_async)
+        self._refresh_btn.pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", padx=8, fill="y")
 
         self._file_label = ttk.Label(toolbar, text="(unsaved)", foreground="#888888")
@@ -540,6 +547,65 @@ class DeckEditor(tk.Tk):
 
     def _copy_to_clipboard(self, section: str) -> None:
         pass  # placeholder
+
+    # ------------------------------------------------------------------
+    # Card database refresh (fetch from YGOPRODeck in background thread)
+    # ------------------------------------------------------------------
+
+    def _refresh_cards_async(self) -> None:
+        self._refresh_btn.config(state="disabled", text="🔄 Updating…")
+        self._set_status("Fetching latest card list from YGOPRODeck API…")
+        threading.Thread(target=self._do_refresh, daemon=True).start()
+
+    def _do_refresh(self) -> None:
+        try:
+            req = urllib.request.Request(
+                YGOPRODECK_URL,
+                headers={"User-Agent": "ygo-meta-ai/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                raw = json.loads(resp.read().decode("utf-8"))
+
+            db: dict[int, str] = {}
+            for card in raw.get("data", []):
+                db[card["id"]] = card["name"]
+                for img in card.get("card_images", []):
+                    alt_id = img.get("id")
+                    if alt_id and alt_id != card["id"]:
+                        db[alt_id] = card["name"]
+
+            # Write to disk
+            CARD_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(CARD_DB_PATH, "w", encoding="utf-8") as f:
+                json.dump({str(k): v for k, v in db.items()}, f, ensure_ascii=False, indent=2)
+
+            # Schedule UI update back on main thread
+            self.after(0, lambda: self._apply_refreshed_db(db))
+
+        except Exception as exc:
+            self.after(0, lambda: self._refresh_failed(str(exc)))
+
+    def _apply_refreshed_db(self, db: dict[int, str]) -> None:
+        prev = len(self._card_db)
+        self._card_db = db
+        self._name_to_code = {v.lower(): k for k, v in db.items()}
+        self._all_cards_by_name = sorted(
+            ((v, k) for k, v in db.items()), key=lambda x: x[0].lower()
+        )
+        # Re-run current search so results reflect new cards
+        self._do_search()
+        self._refresh_btn.config(state="normal", text="🔄 Update Cards")
+        added = len(db) - prev
+        sign = f"+{added}" if added >= 0 else str(added)
+        self._set_status(
+            f"Card database updated — {len(db):,} cards total ({sign} since last update). "
+            f"Saved to data/card_names.json."
+        )
+
+    def _refresh_failed(self, error: str) -> None:
+        self._refresh_btn.config(state="normal", text="🔄 Update Cards")
+        self._set_status(f"Update failed: {error}", error=True)
+        messagebox.showerror("Update Failed", f"Could not fetch cards from YGOPRODeck:\n\n{error}")
 
     # ------------------------------------------------------------------
     # Status
