@@ -1,5 +1,74 @@
 # CLAUDE.md
 
+# General
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+**Always run tests and the relevant script before reporting done. Never tell the user work is complete without first confirming it runs with zero errors.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+
 ## Project: YGO Meta AI
 
 Two subsystems built on top of `sbl1996/ygo-agent` (vendored as a git submodule):
@@ -56,6 +125,38 @@ pytest tests/ -v
 # Lint
 ruff check src/ tests/
 ```
+
+---
+
+## NEVER Reimplement Vendor Game-Playing Logic
+
+**All game-playing logic lives in `vendor/ygo-agent`. Do not reimplement it.**
+
+- Use `ygoinf.features.get_legal_actions(action_msg)` to count/enumerate valid actions — never write your own message-type switch.
+- Use `ygoinf.models` enum string values directly (`"hand"`, `"main1"`, `"faceup_attack"`, etc.) — never map raw YGOPro integer flags to strings in application code.
+- The one place that converts raw `card_info.json` integer attributes to enum strings is `ygo_meta.llm_agent.card_db._ATTR_INT_TO_STR`. Do not duplicate this mapping elsewhere.
+- `card_from_db()` lives in `ygo_meta.llm_agent.card_db`. Import it from there — never re-define it in scripts, tests, or any other module.
+
+**Never construct synthetic game states with hand-coded move lists.** Any code that constructs `MsgSelectIdleCmd`, `MsgSelectBattleCmd`, etc. with hardcoded `idle_cmds`/`battle_cmds` is reimplementing the game engine's move-generation logic. Valid move lists come only from the running game engine via the ygoinf server.
+
+Violations that have already caused rewrites: integer location/phase/position maps in `demo_agent.py`, duplicate `_ATTR_MAP` in tests, `_count_actions()` switch in `agent.py`, synthetic `idle_cmds` in demo scenarios offering illegal normal summons of level 5 monsters.
+
+---
+
+## NEVER Reimplement Vendor Engine Types
+
+**Never redefine types that already exist in `vendor/ygo-agent/ygoinf/ygoinf/models.py`.**
+`src/ygo_meta/engine/types.py` must only re-export from `ygoinf.models` — zero local
+class definitions. Any divergence (different field names, int instead of enum, wrong
+discriminator key) causes the inference server to receive malformed data and produce
+invalid moves. If `ygoinf.models` changes, update the re-exports; do not duplicate.
+
+Key vendor schema facts every developer must know:
+- `ActionMsg.data` holds the actual message variant (discriminator key: `msg_type`, not `msg`)
+- `Global` fields: `my_lp`, `op_lp`, `phase: Phase` (enum), `is_first: bool`, `is_my_turn: bool`
+- `Card` fields: `attack`, `defense` (not `atk`/`def_`); `attribute/location/position/controller/race` are enums
+- `MsgSelectIdleCmd.idle_cmds` (not `.actions`); `MsgSelectBattleCmd.battle_cmds`; `MsgSelectChain.chains`
+- `MsgSelectCard/Tribute/Sum` use `CardLocation` for selection items — no card code, look up from `Input.cards`
 
 ---
 

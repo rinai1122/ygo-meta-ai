@@ -49,3 +49,39 @@ def get_card_type(code: int) -> str:
         return "monster"
     info = load_card_info()
     return info.get(code, {}).get("card_type", "monster")
+
+
+# card_info.json stores attribute as an integer YGOPro flag; map to ygoinf enum string
+_ATTR_INT_TO_STR: dict[int, str] = {
+    0: "none", 1: "earth", 2: "water", 4: "fire",
+    8: "wind", 16: "light", 32: "dark", 64: "divine",
+}
+
+
+def card_from_db(
+    code: int,
+    controller: str = "me",
+    location: str = "hand",
+    position: str = "faceup_attack",
+    sequence: int = 0,
+) -> "Card":
+    """Build a Card with real ATK/DEF/level/attribute from card_info.json."""
+    from ygo_meta.engine.types import Card  # avoid circular import at module level
+    info = load_card_info().get(code, {})
+    attr = _ATTR_INT_TO_STR.get(info.get("attribute") or 0, "none")
+    return Card(
+        code=code,
+        controller=controller,
+        location=location,
+        sequence=sequence,
+        position=position,
+        overlay_sequence=-1,
+        attribute=attr,
+        race="none",
+        level=info.get("level") or 0,
+        counter=0,
+        negated=False,
+        attack=info.get("atk") or 0,
+        defense=info.get("def") or 0,
+        types=[],
+    )

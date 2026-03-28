@@ -22,7 +22,7 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    archetypes: list[str] = typer.Option(..., help="Archetype names (subdirs of engines-dir)"),
+    archetypes: list[str] = typer.Option(..., help="Archetype names (subdirs of engines-dir)", metavar="ARCHETYPE"),
     engines_dir: Path = typer.Option(Path("data/engines"), help="Directory containing engine YDK subdirs"),
     staples_dir: Path = typer.Option(Path("data/staples"), help="Directory with staple YAML files"),
     results_dir: Path = typer.Option(Path("results"), help="Directory to save results"),

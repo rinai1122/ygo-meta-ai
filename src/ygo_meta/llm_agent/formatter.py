@@ -1,7 +1,10 @@
 """
 Converts the ygoinf Input model into human-readable text for the LLM.
 
-The output has three blocks:
+Uses vendor types directly (ygoinf.models). ActionMsg.data holds the actual
+message variant; never access ActionMsg directly as if it were the message.
+
+Output blocks:
   GAME STATE  — turn, phase, LP
   BOARD       — cards grouped by controller and location
   OPTIONS     — numbered list of valid actions
@@ -9,85 +12,41 @@ The output has three blocks:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from ygo_meta.engine.types import (
     ActionMsg,
+    AnnounceAttrib,
+    BattleCmd,
+    BattleCmdType,
     Card,
+    CardLocation,
+    Chain,
+    Controller,
     Global,
+    IdleCmd,
+    IdleCmdType,
     Input,
+    Location,
     MsgAnnounceAttrib,
     MsgAnnounceNumber,
     MsgSelectBattleCmd,
     MsgSelectCard,
     MsgSelectChain,
-    MsgSelectDisField,
+    MsgSelectDisfield,
     MsgSelectEffectYn,
     MsgSelectIdleCmd,
+    MsgSelectOption,
     MsgSelectPlace,
     MsgSelectPosition,
     MsgSelectSum,
     MsgSelectTribute,
+    MsgSelectUnselectCard,
     MsgSelectYesNo,
+    Position,
+    SelectSumCard,
 )
 from ygo_meta.llm_agent.card_db import get_card_name, get_card_type
-
-# ---------------------------------------------------------------------------
-# Location / phase / attribute / race constants (from ygopro-core)
-# ---------------------------------------------------------------------------
-
-LOCATION_NAMES = {
-    0x01: "Deck",
-    0x02: "Hand",
-    0x04: "Monster Zone",
-    0x08: "Spell/Trap Zone",
-    0x10: "Graveyard",
-    0x20: "Banished",
-    0x40: "Extra Deck",
-    0x80: "Extra Monster Zone",
-}
-
-PHASE_NAMES = {
-    0x01: "DRAW",
-    0x02: "STANDBY",
-    0x04: "MAIN1",
-    0x08: "BATTLE_START",
-    0x10: "BATTLE_STEP",
-    0x20: "DAMAGE",
-    0x40: "DAMAGE_CALC",
-    0x80: "BATTLE",
-    0x100: "MAIN2",
-    0x200: "END",
-}
-
-ATTRIBUTE_NAMES = {
-    0x01: "EARTH", 0x02: "WATER", 0x04: "FIRE",
-    0x08: "WIND", 0x10: "LIGHT", 0x20: "DARK", 0x40: "DIVINE",
-}
-
-POSITION_NAMES = {
-    0x1: "faceup_attack",
-    0x2: "facedown_attack",
-    0x4: "faceup_defense",
-    0x8: "facedown_defense",
-}
-
-IDLE_MSG_NAMES = {
-    0: "Summon",
-    1: "Set (monster)",
-    2: "Special Summon",
-    3: "Reposition",
-    4: "Set (spell/trap)",
-    5: "Activate",
-    6: "Enter Battle Phase",
-    7: "Enter Main Phase 2",
-    8: "End Turn",
-}
-
-BATTLE_MSG_NAMES = {
-    0: "Attack",
-    1: "Activate effect",
-    2: "Go to Main Phase 2",
-    3: "End turn",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -105,16 +64,26 @@ def _card_str(card: Card, brief: bool = False) -> str:
         return f"{name} | Spell"
     if ctype == "trap":
         return f"{name} | Trap"
-    pos  = POSITION_NAMES.get(card.position, f"pos={card.position}")
-    attr = ATTRIBUTE_NAMES.get(card.attribute, "?")
-    return f"{name} ATK {card.atk}/DEF {card.def_} | {pos} | Lv{card.level} | {attr}"
+    pos = card.position.value
+    attr = card.attribute.value.upper()
+    return f"{name} ATK {card.attack}/DEF {card.defense} | {pos} | Lv{card.level} | {attr}"
 
 
-def _phase_str(phase: int) -> str:
-    for mask, name in PHASE_NAMES.items():
-        if phase & mask:
-            return name
-    return f"phase={phase}"
+def _find_card_at(cards: list[Card], loc: CardLocation) -> Optional[Card]:
+    """Look up a card by its location in the cards list."""
+    for c in cards:
+        if (c.controller.value == loc.controller.value
+                and c.location.value == loc.location.value
+                and c.sequence == loc.sequence):
+            return c
+    return None
+
+
+def _card_name_at(cards: list[Card], loc: CardLocation) -> str:
+    card = _find_card_at(cards, loc)
+    if card and card.code:
+        return f"[{get_card_name(card.code)}]"
+    return "[unknown]"
 
 
 # ---------------------------------------------------------------------------
@@ -122,111 +91,120 @@ def _phase_str(phase: int) -> str:
 # ---------------------------------------------------------------------------
 
 def _build_game_state_block(g: Global) -> str:
-    my_lp, opp_lp = g.lp[0], g.lp[1]
-    phase = _phase_str(g.phase)
+    phase = g.phase.value.upper()
     first = "Yes" if g.is_first else "No"
     my_turn = "Yes" if g.is_my_turn else "No"
     return (
         "=== GAME STATE ===\n"
         f"Turn: {g.turn} | Phase: {phase} | You go first: {first} | Your turn: {my_turn}\n"
-        f"Your LP: {my_lp} | Opponent LP: {opp_lp}"
+        f"Your LP: {g.my_lp} | Opponent LP: {g.op_lp}"
     )
 
 
 def _build_board_block(cards: list[Card]) -> str:
-    def group(controller: int) -> dict[int, list[Card]]:
-        result: dict[int, list[Card]] = {}
+    def group(ctrl_value: str) -> dict[str, list[Card]]:
+        result: dict[str, list[Card]] = {}
         for c in cards:
-            if c.controller == controller:
-                result.setdefault(c.location, []).append(c)
+            if c.controller.value == ctrl_value:
+                result.setdefault(c.location.value, []).append(c)
         return result
 
-    def render_location(loc: int, loc_cards: list[Card], hidden: bool) -> str:
-        loc_name = LOCATION_NAMES.get(loc, f"zone={loc}")
+    def render_location(loc_name: str, loc_cards: list[Card], hidden: bool) -> str:
         if hidden:
             return f"  {loc_name}: {len(loc_cards)} card(s)"
         parts = ", ".join(_card_str(c) for c in loc_cards)
         return f"  {loc_name}: {parts}"
 
     lines = ["=== BOARD ==="]
-    for label, ctrl, hide_hand in [("YOUR FIELD", 0, False), ("OPPONENT FIELD", 1, True)]:
+    for label, ctrl, hide_hand in [("YOUR FIELD", "me", False), ("OPPONENT FIELD", "opponent", True)]:
         lines.append(label + ":")
         groups = group(ctrl)
-        for loc in sorted(groups):
-            # Hide opponent's hand and deck
-            hidden = hide_hand and loc in (0x01, 0x02)
-            lines.append(render_location(loc, groups[loc], hidden))
+        for loc_name in sorted(groups):
+            hidden = hide_hand and loc_name in ("hand", "deck")
+            lines.append(render_location(loc_name, groups[loc_name], hidden))
         if not groups:
             lines.append("  (empty)")
     return "\n".join(lines)
 
 
-def _build_action_block(msg: ActionMsg) -> str:
+def _build_action_block(msg, cards: list[Card] = ()) -> str:
+    """
+    Build the OPTIONS block from a message variant (not ActionMsg wrapper).
+    Pass `cards` (from Input.cards) so card names can be looked up by location.
+    """
     lines: list[str] = []
 
     if isinstance(msg, MsgSelectIdleCmd):
-        for i, a in enumerate(msg.actions):
-            action_name = IDLE_MSG_NAMES.get(a.msg, f"action={a.msg}")
-            card_name = get_card_name(a.card.code)
-            lines.append(f"[{i}] {action_name} {card_name}" if card_name != "unknown" else f"[{i}] {action_name}")
+        for i, cmd in enumerate(msg.idle_cmds):
+            label = cmd.cmd_type.value.replace("_", " ")
+            code = cmd.data.card_info.code if cmd.data else 0
+            name = get_card_name(code) if code else ""
+            lines.append(f"[{i}] {label}" + (f" {name}" if name else ""))
 
     elif isinstance(msg, MsgSelectBattleCmd):
-        for i, a in enumerate(msg.actions):
-            action_name = BATTLE_MSG_NAMES.get(a.msg, f"action={a.msg}")
-            if a.card:
-                lines.append(f"[{i}] {action_name} with {get_card_name(a.card.code)}")
-            else:
-                lines.append(f"[{i}] {action_name}")
+        for i, cmd in enumerate(msg.battle_cmds):
+            label = cmd.cmd_type.value.replace("_", " ")
+            code = cmd.data.card_info.code if cmd.data else 0
+            name = get_card_name(code) if code else ""
+            lines.append(f"[{i}] {label}" + (f" with {name}" if name else ""))
 
     elif isinstance(msg, MsgSelectChain):
-        for i, a in enumerate(msg.actions):
-            lines.append(f"[{i}] Chain {get_card_name(a.card.code)}")
+        for i, chain in enumerate(msg.chains):
+            lines.append(f"[{i}] Chain [{get_card_name(chain.code)}]")
         if not msg.forced:
-            lines.append(f"[{len(msg.actions)}] Do not chain")
+            lines.append(f"[{len(msg.chains)}] Do not chain")
 
     elif isinstance(msg, MsgSelectCard):
-        for i, a in enumerate(msg.actions):
-            lines.append(f"[{i}] Select {_card_str(a.card, brief=True)}")
-        lines.append(f"(select {msg.min_}–{msg.max_} card(s))")
+        for i, sel in enumerate(msg.cards):
+            lines.append(f"[{i}] Select {_card_name_at(list(cards), sel.location)}")
+        lines.append(f"(select {msg.min}–{msg.max} card(s))")
 
     elif isinstance(msg, MsgSelectTribute):
-        for i, a in enumerate(msg.actions):
-            lines.append(f"[{i}] Tribute {_card_str(a.card, brief=True)}")
-        lines.append(f"(tribute {msg.min_}–{msg.max_} monster(s))")
+        for i, sel in enumerate(msg.cards):
+            lines.append(f"[{i}] Tribute {_card_name_at(list(cards), sel.location)} (Lv{sel.level})")
+        lines.append(f"(tribute {msg.min}–{msg.max} monster(s))")
 
     elif isinstance(msg, MsgSelectSum):
-        for i, a in enumerate(msg.actions):
-            lines.append(f"[{i}] Select {_card_str(a.card, brief=True)} (Lv{a.level})")
+        all_cards = list(msg.must_cards) + list(msg.cards)
+        for i, sel in enumerate(all_cards):
+            name = _card_name_at(list(cards), sel.location)
+            lv = sel.level1 or sel.level2
+            lines.append(f"[{i}] Select {name} (Lv{lv})")
         lines.append(f"(target level sum: {msg.level_sum})")
 
     elif isinstance(msg, MsgSelectPosition):
-        for i, a in enumerate(msg.actions):
-            pos_name = POSITION_NAMES.get(a.position, f"pos={a.position}")
-            lines.append(f"[{i}] {pos_name}")
+        for i, pos in enumerate(msg.positions):
+            lines.append(f"[{i}] {pos.value}")
 
     elif isinstance(msg, MsgSelectYesNo):
-        lines.append(f"[0] Yes — activate effect of {get_card_name(msg.card.code)}")
+        lines.append("[0] Yes")
         lines.append("[1] No")
 
     elif isinstance(msg, MsgSelectEffectYn):
-        lines.append(f"[0] Activate effect of {get_card_name(msg.card.code)}")
+        lines.append(f"[0] Activate effect of [{get_card_name(msg.code)}]")
         lines.append("[1] Do not activate")
 
     elif isinstance(msg, MsgAnnounceAttrib):
-        for i, a in enumerate(msg.actions):
-            attr_name = ATTRIBUTE_NAMES.get(a.attribute, f"attr={a.attribute}")
-            lines.append(f"[{i}] {attr_name}")
+        for i, a in enumerate(msg.attributes):
+            lines.append(f"[{i}] {a.attribute.value.upper()}")
         lines.append(f"(announce {msg.count} attribute(s))")
 
     elif isinstance(msg, MsgAnnounceNumber):
-        for i, a in enumerate(msg.actions):
+        for i, a in enumerate(msg.numbers):
             lines.append(f"[{i}] {a.number}")
 
-    elif isinstance(msg, (MsgSelectPlace, MsgSelectDisField)):
-        for i, a in enumerate(msg.actions):
-            who = "my" if a.controller == 0 else "opponent's"
-            loc_name = LOCATION_NAMES.get(a.location, f"zone={a.location}")
-            lines.append(f"[{i}] Place on {who} {loc_name} slot {a.sequence}")
+    elif isinstance(msg, (MsgSelectPlace, MsgSelectDisfield)):
+        for i, place in enumerate(msg.places):
+            who = "my" if place.controller.value == "me" else "opponent's"
+            lines.append(f"[{i}] Place on {who} {place.location.value} slot {place.sequence}")
+
+    elif isinstance(msg, MsgSelectUnselectCard):
+        for i, sel in enumerate(msg.selectable_cards):
+            lines.append(f"[{i}] Select {_card_name_at(list(cards), sel.location)}")
+
+    elif isinstance(msg, MsgSelectOption):
+        for i, opt in enumerate(msg.options):
+            lines.append(f"[{i}] Option {opt.code}")
 
     else:
         lines.append("[0] (action)")
@@ -242,7 +220,7 @@ def format_input(input_: Input) -> tuple[str, str, str]:
     """Return (game_state_block, board_block, action_block)."""
     game_state = _build_game_state_block(input_.global_)
     board = _build_board_block(input_.cards)
-    actions = _build_action_block(input_.action_msg)
+    actions = _build_action_block(input_.action_msg.data, input_.cards)
     return game_state, board, actions
 
 

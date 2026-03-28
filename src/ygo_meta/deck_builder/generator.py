@@ -93,6 +93,7 @@ def generate_decks(
     n_variants: int = 4,
     target_size: int = 40,
     seed: int = 0,
+    main_only: bool = False,
 ) -> list[Deck]:
     """
     Generate n_variants decks for one archetype by combining the engine YDK
@@ -100,13 +101,15 @@ def generate_decks(
 
     Each deck has exactly `target_size` main deck cards (engine + staples).
     If the engine already meets or exceeds target_size, no staples are added.
+
+    main_only: if True, only main deck staples (handtraps/backrow) are added;
+               the engine's extra deck is kept as-is with no additions.
     """
     rng = random.Random(seed)
     engine_deck = parse_ydk(engine_path)
     main_pool, extra_pool = _load_staple_pool(staples_dir)
     archetype = engine_deck.archetype
     available_main = max(0, target_size - len(engine_deck.main))
-    available_extra = max(0, 15 - len(engine_deck.extra))
 
     decks: list[Deck] = []
     for i in range(n_variants):
@@ -116,11 +119,11 @@ def generate_decks(
             staple_codes, combo = [], {}
 
         main = engine_deck.main + staple_codes
-        # If still short (pool exhausted), leave as-is — validator will report it.
 
-        # Fill remaining extra deck slots with generic utility extra deck staples
-        if available_extra > 0 and extra_pool:
-            extra_staples = [e["code"] for e in extra_pool[:available_extra]]
+        # Extra deck: keep engine's extra deck as-is when main_only.
+        if not main_only:
+            available_extra = max(0, 15 - len(engine_deck.extra))
+            extra_staples = [e["code"] for e in extra_pool[:available_extra]] if available_extra and extra_pool else []
         else:
             extra_staples = []
         extra = (engine_deck.extra + extra_staples)[:15]
@@ -136,7 +139,6 @@ def generate_decks(
         )
         errors = validate_deck(deck)
         if errors:
-            # Log but still include — caller can filter
             import warnings
             warnings.warn(f"{variant_id}: {errors}", stacklevel=2)
         decks.append(deck)
