@@ -127,9 +127,11 @@ def run_evolution(
     max_generations: int = 10,
     epsilon: float = 0.01,
     seed: int = 0,
+    runner: object | None = None,
 ) -> list[GenerationResult]:
     rng = random.Random(seed)
-    runner = BattleRunner()
+    if runner is None:
+        runner = BattleRunner()
     results_dir.mkdir(parents=True, exist_ok=True)
     pm_dir = results_dir / "payoff_matrices"
     ns_dir = results_dir / "nash_solutions"

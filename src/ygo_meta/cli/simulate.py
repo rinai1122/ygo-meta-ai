@@ -13,6 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
+
+load_dotenv()
 from rich.console import Console
 from rich.table import Table
 
@@ -31,15 +34,35 @@ def main(
     generations: int = typer.Option(10, help="Max evolutionary generations"),
     epsilon: float = typer.Option(0.01, help="Convergence threshold"),
     seed: int = typer.Option(0, help="Random seed"),
+    evaluator: str = typer.Option("rl", help="Battle evaluator: 'rl' (pre-trained agent), 'llm' (Claude/Gemini), or 'random' (free, for debugging)"),
+    provider: str = typer.Option("anthropic", help="LLM provider (llm evaluator only): anthropic or gemini"),
+    model: str = typer.Option(None, help="LLM model name (llm evaluator only; default: claude-opus-4-6 / gemini-2.0-flash)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Print LLM prompts and responses to stdout"),
 ) -> None:
     """Run evolutionary Nash equilibrium meta simulation."""
     from ygo_meta.simulation.evolution import run_evolution
+
+    if evaluator not in ("rl", "llm", "random"):
+        console.print(f"[red]Unknown evaluator '{evaluator}'. Use 'rl', 'llm', or 'random'.[/red]")
+        raise typer.Exit(1)
+
+    runner = None
+    if evaluator == "llm":
+        from ygo_meta.simulation.llm_battle_runner import LLMBattleRunner
+        runner = LLMBattleRunner(provider=provider, model=model, verbose=verbose)
+    elif evaluator == "random":
+        from ygo_meta.simulation.llm_battle_runner import RandomBattleRunner
+        runner = RandomBattleRunner(verbose=verbose)
 
     console.print(f"[bold green]YGO Meta Simulation[/bold green]")
     console.print(f"Archetypes: {archetypes}")
     console.print(f"Variants per archetype: {n_variants} → {len(archetypes) * n_variants} total decks")
     console.print(f"Episodes per matchup: {episodes}")
-    console.print(f"Max generations: {generations}\n")
+    console.print(f"Max generations: {generations}")
+    evaluator_label = evaluator
+    if evaluator == "llm":
+        evaluator_label += f" ({provider} / {model or 'default'})"
+    console.print(f"Evaluator: {evaluator_label}\n")
 
     history = run_evolution(
         archetypes=archetypes,
@@ -51,6 +74,7 @@ def main(
         max_generations=generations,
         epsilon=epsilon,
         seed=seed,
+        runner=runner,
     )
 
     # Summary table

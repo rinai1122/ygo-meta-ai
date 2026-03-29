@@ -100,9 +100,8 @@ main_staple:
     name: "Forbidden Droplet"
     copies_max: 3
 
-  - code: 65681983
-    name: "Crossout Designator"
-    copies_max: 3
+  # Crossout Designator removed: triggers MSG_ANNOUNCE_CARD (declare a card name),
+  # which ygoenv's C++ does not implement — causes SIGABRT mid-game.
 
   # Dominus series (Counter/Quick-Play disruption package)
   - code: 97045737

@@ -6,6 +6,22 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+---
+
+## RULE: Always Test Before Saying Done
+
+**Never tell the user a task is complete without first running tests (and the relevant script if applicable) and confirming zero errors.**
+
+This means:
+- Run `pytest tests/ -v` after every code change.
+- If the task involves a runnable script, run it and verify it succeeds.
+- If tests fail, fix them. Do not report done with failing tests.
+- If the script errors, debug and fix before responding.
+
+Violating this rule has already caused multiple wasted debugging sessions.
+
+---
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**

@@ -32,7 +32,9 @@ class LLMAgent:
         provider: str = "anthropic",
         max_tokens: int = 16,
         api_key: str | None = None,
+        verbose: bool = False,
     ) -> None:
+        self._verbose = verbose
         self._model = model
         self._provider = provider
         self._max_tokens = max_tokens
@@ -54,6 +56,8 @@ class LLMAgent:
             raise ValueError(f"Unknown provider '{provider}'. Use 'anthropic' or 'gemini'.")
 
     def _call_llm(self, prompt_text: str) -> str:
+        if self._verbose:
+            print(f"\n{'='*60}\n[LLM PROMPT]\n{prompt_text}\n{'='*60}", flush=True)
         if self._provider == "anthropic":
             response = self._client.messages.create(
                 model=self._model,
@@ -61,10 +65,13 @@ class LLMAgent:
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt_text}],
             )
-            return response.content[0].text.strip() if response.content else "0"
+            result = response.content[0].text.strip() if response.content else "0"
         else:  # gemini
             response = self._client.generate_content(prompt_text)
-            return response.text.strip() if response.text else "0"
+            result = response.text.strip() if response.text else "0"
+        if self._verbose:
+            print(f"[LLM RESPONSE] {result}", flush=True)
+        return result
 
     def choose_action(self, input_: Input) -> int:
         """Return the index of the chosen action (0-based)."""

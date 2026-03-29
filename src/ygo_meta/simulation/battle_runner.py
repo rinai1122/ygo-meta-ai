@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -39,7 +40,16 @@ class BattleResult:
 
 class BattleRunner:
     def __init__(self, python_exe: str | None = None, xla_device: str = "cpu") -> None:
-        self._python = python_exe or sys.executable
+        if python_exe:
+            self._python = python_exe
+        elif venv := os.environ.get("YGOAGENT_VENV"):
+            # Prefer the venv's python which has JAX/ygoenv installed
+            candidate = Path(venv) / "bin" / "python"
+            if not candidate.exists():
+                candidate = Path(venv) / "Scripts" / "python.exe"
+            self._python = str(candidate)
+        else:
+            self._python = sys.executable
         self._xla_device = xla_device
 
     def run(
@@ -64,8 +74,9 @@ class BattleRunner:
             write_ydk(deck2, ydk2)
 
             cmd = [
-                self._python, str(_BATTLE_SCRIPT),
+                self._python, "-P", str(_BATTLE_SCRIPT),
                 "--xla_device", self._xla_device,
+                "--deck", str(tmp),   # LF temp dir avoids CRLF in vendor assets/deck
                 "--deck1", str(ydk1),
                 "--deck2", str(ydk2),
                 "--num-episodes", str(num_episodes),
