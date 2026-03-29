@@ -32,6 +32,8 @@ from pathlib import Path
 ROOT      = Path(__file__).parent.parent
 OUT_NAMES = ROOT / "data" / "card_names.json"
 OUT_INFO  = ROOT / "data" / "card_info.json"
+OUT_CL    = ROOT / "data" / "code_list.txt"
+_VENDOR_CL = ROOT / "vendor" / "ygo-agent" / "scripts" / "code_list.txt"
 
 YGOPRODECK_URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes"
 _HEADERS       = {"User-Agent": "ygo-meta-ai/1.0 (github.com/rinai1122/ygo-meta-ai)"}
@@ -114,9 +116,75 @@ def fetch_all_cards() -> tuple[dict[int, str], dict[str, dict]]:
     return names, info
 
 
+def _supplement_from_cdb(
+    names: dict[int, str],
+) -> None:
+    """
+    Read card names from cards.cdb and add any that are missing from the API
+    result (e.g. tokens like Primal Being Token that YGOPRODeck doesn't expose).
+    Modifies `names` in place.
+    """
+    import sqlite3
+
+    cdb_path = ROOT / "vendor" / "ygo-agent" / "assets" / "locale" / "en" / "cards.cdb"
+    if not cdb_path.exists():
+        return
+    try:
+        con = sqlite3.connect(str(cdb_path))
+        cur = con.cursor()
+        cur.execute("SELECT id, name FROM texts WHERE name != ''")
+        for cid, cname in cur.fetchall():
+            if cid not in names:
+                names[cid] = cname
+        con.close()
+    except Exception as exc:
+        print(f"Warning: could not read cards.cdb for token names: {exc}")
+
+
+def _generate_code_list() -> None:
+    """
+    Generate data/code_list.txt from the CDB (authoritative source).
+
+    Every card in the CDB gets an entry with has_script=1.  This is safer than
+    copying the vendor's text file because:
+      1. The vendor's code_list.txt can be outdated (missing new cards used in
+         engine YDKs → "Card not found in code list" crash at init_module).
+      2. The compiled ygopro_ygoenv.so only loads card data (cards_data_) for
+         has_script=1 entries.  has_script=0 cards are skipped, so tokens
+         summoned by effects crash with [card_reader_callback] Card not found.
+
+    Setting has_script=1 is safe: read_card_script() returns {nullptr, 0} when
+    the .lua file is absent, and the engine treats that as "no effects".
+    """
+    import sqlite3
+
+    cdb_path = ROOT / "vendor" / "ygo-agent" / "assets" / "locale" / "en" / "cards.cdb"
+    if not cdb_path.exists():
+        print(f"Warning: cards.cdb not found at {cdb_path}, skipping code_list generation")
+        return
+    try:
+        con = sqlite3.connect(str(cdb_path))
+        ids = [row[0] for row in con.execute("SELECT id FROM datas ORDER BY id").fetchall()]
+        con.close()
+    except Exception as exc:
+        print(f"Warning: could not read cards.cdb for code_list: {exc}")
+        return
+    OUT_CL.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUT_CL, "w", encoding="ascii") as f:
+        for card_id in ids:
+            f.write(f"{card_id} 1\n")
+    print(f"Written {len(ids)} entries to {OUT_CL}  (all has_script=1, sourced from CDB)")
+
+
 def main() -> None:
+    _generate_code_list()
     names, info = fetch_all_cards()
     print(f"Fetched {len(names)} card entries from YGOPRODeck API")
+    before = len(names)
+    _supplement_from_cdb(names)
+    added = len(names) - before
+    if added:
+        print(f"Supplemented {added} additional entries from cards.cdb (tokens etc.)")
 
     OUT_NAMES.parent.mkdir(parents=True, exist_ok=True)
 

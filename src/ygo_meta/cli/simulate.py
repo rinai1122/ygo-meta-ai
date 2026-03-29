@@ -35,8 +35,9 @@ def main(
     epsilon: float = typer.Option(0.01, help="Convergence threshold"),
     seed: int = typer.Option(0, help="Random seed"),
     evaluator: str = typer.Option("rl", help="Battle evaluator: 'rl' (pre-trained agent), 'llm' (Claude/Gemini), or 'random' (free, for debugging)"),
+    checkpoint: Path = typer.Option(None, help="RL checkpoint (.flax_model). Auto-detects checkpoints/agent.flax_model if omitted."),
     provider: str = typer.Option("anthropic", help="LLM provider (llm evaluator only): anthropic or gemini"),
-    model: str = typer.Option(None, help="LLM model name (llm evaluator only; default: claude-opus-4-6 / gemini-2.0-flash)"),
+    model: str = typer.Option(None, help="LLM model name (llm evaluator only; default: claude-opus-4-6 / gemini-2.5-flash)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print LLM prompts and responses to stdout"),
 ) -> None:
     """Run evolutionary Nash equilibrium meta simulation."""
@@ -47,7 +48,10 @@ def main(
         raise typer.Exit(1)
 
     runner = None
-    if evaluator == "llm":
+    if evaluator == "rl":
+        from ygo_meta.simulation.battle_runner import BattleRunner
+        runner = BattleRunner(checkpoint=str(checkpoint) if checkpoint else None)
+    elif evaluator == "llm":
         from ygo_meta.simulation.llm_battle_runner import LLMBattleRunner
         runner = LLMBattleRunner(provider=provider, model=model, verbose=verbose)
     elif evaluator == "random":

@@ -45,12 +45,20 @@ class LLMAgent:
             import anthropic
             self._client = anthropic.Anthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
         elif provider == "gemini":
-            import google.generativeai as genai
-            genai.configure(api_key=api_key or os.environ["GOOGLE_API_KEY"])
-            self._client = genai.GenerativeModel(
-                model_name=model,
-                system_instruction=self._system_prompt,
-                generation_config=genai.GenerationConfig(max_output_tokens=max_tokens),
+            import httpx
+            from google import genai
+            from google.genai import types as genai_types
+            self._genai_types = genai_types
+            # Force IPv4 transport: WSL's default network stack resolves Google APIs
+            # to IPv6 addresses but has no IPv6 route, causing ConnectError ENETUNREACH.
+            _transport = httpx.HTTPTransport(local_address="0.0.0.0")
+            _httpx_client = httpx.Client(transport=_transport)
+            self._client = genai.Client(
+                api_key=api_key or os.environ["GOOGLE_API_KEY"],
+                http_options=genai_types.HttpOptions(
+                    httpx_client=_httpx_client,
+                    timeout=30000,
+                ),
             )
         else:
             raise ValueError(f"Unknown provider '{provider}'. Use 'anthropic' or 'gemini'.")
@@ -67,8 +75,19 @@ class LLMAgent:
             )
             result = response.content[0].text.strip() if response.content else "0"
         else:  # gemini
-            response = self._client.generate_content(prompt_text)
-            result = response.text.strip() if response.text else "0"
+            try:
+                response = self._client.models.generate_content(
+                    model=self._model,
+                    contents=prompt_text,
+                    config=self._genai_types.GenerateContentConfig(
+                        system_instruction=self._system_prompt,
+                        max_output_tokens=self._max_tokens,
+                    ),
+                )
+                result = response.text.strip() if response.text else "0"
+            except Exception as e:
+                print(f"[WARN] Gemini API error: {e}", flush=True)
+                result = "0"
         if self._verbose:
             print(f"[LLM RESPONSE] {result}", flush=True)
         return result

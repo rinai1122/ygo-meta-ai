@@ -118,6 +118,9 @@ def _run_game_subprocess(
                     proc.stdin.flush()
                 elif msg["type"] == "done":
                     wins[msg["winner"]] += 1
+        except Exception:
+            proc.kill()
+            raise
         finally:
             proc.wait()
 
@@ -182,7 +185,7 @@ class LLMBattleRunner:
         verbose: bool = False,
     ) -> None:
         self._provider = provider
-        _defaults = {"anthropic": "claude-opus-4-6", "gemini": "gemini-2.0-flash"}
+        _defaults = {"anthropic": "claude-opus-4-6", "gemini": "gemini-2.5-flash"}
         self._model = model or _defaults.get(provider, "claude-opus-4-6")
         self._api_key = api_key
         self._verbose = verbose

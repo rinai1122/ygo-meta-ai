@@ -25,17 +25,17 @@ main_staple:
     name: "Ghost Belle & Haunted Mansion"
     copies_max: 3
 
-  - code: 27204311
-    name: "Nibiru, the Primal Being"
-    copies_max: 3
-
   - code: 94145021
     name: "Droll & Lock Bird"
     copies_max: 3
 
+  - code: 27204311
+    name: "Nibiru, the Primal Being"
+    copies_max: 3
+
   - code: 24508238
     name: "D.D. Crow"
-    copies_max: 2
+    copies_max: 3
 
   # Mulcharmy series (send to GY when opponent draws/searches during their turn)
   - code: 42141493
@@ -63,15 +63,16 @@ main_staple:
 
   # NOTE: Bystial Elastikum not yet indexed in YGOPRODeck — add when available
 
-  # Dimension Attractor (while in GY, cards go to Banished instead; Limited OCG)
-  - code: 71315011
-    name: "Dimension Attractor"
-    copies_max: 1    # Limited OCG (≈MD)
 
   # Artifact Lancea (negate banishing effects when destroyed/sent from hand)
   - code: 34267821
     name: "Artifact Lancea"
     copies_max: 3
+
+  # Dimension Shifter (send to GY to banish all cards sent to GY; Limited OCG)
+  - code: 91800273
+    name: "Dimension Shifter"
+    copies_max: 1
 
   # Maxx "C" (draw 1 each time opponent Special Summons; Limited OCG)
   - code: 23434538

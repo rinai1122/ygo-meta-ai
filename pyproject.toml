@@ -7,6 +7,7 @@ requires-python = ">=3.9"
 dependencies = [
     "httpx>=0.27.0",          # ygoinf HTTP client
     "anthropic>=0.28.0",      # Claude LLM API
+    "google-generativeai>=0.8.0",  # Gemini LLM API
     "nashpy>=0.0.17",         # Nash equilibrium solver
     "numpy>=1.26.0",
     "scipy>=1.13.0",          # LP fallback for large payoff matrices
@@ -39,6 +40,7 @@ ygoagent = [
 [project.scripts]
 ygo-play = "ygo_meta.cli.play:main"
 ygo-simulate = "ygo_meta.cli.simulate:main"
+ygo-train = "ygo_meta.cli.train:app"
 
 [build-system]
 requires = ["hatchling"]

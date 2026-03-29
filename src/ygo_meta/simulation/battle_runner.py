@@ -5,7 +5,8 @@ Both decks use the same pre-trained RL agent. This isolates deck quality
 from agent quality — the RL agent is held constant across all matchups.
 
 Usage:
-    runner = BattleRunner()
+    runner = BattleRunner()                         # auto-detects checkpoints/agent.flax_model
+    runner = BattleRunner(checkpoint="path/to.flax_model")
     result = runner.run(deck1, deck2, num_episodes=128, seed=0)
     print(result.win_rate_d1)  # win rate for deck1
 """
@@ -23,10 +24,9 @@ from pathlib import Path
 from ygo_meta.deck_builder.deck_model import Deck
 from ygo_meta.deck_builder.ydk_parser import write_ydk
 
-_BATTLE_SCRIPT = (
-    Path(__file__).parent.parent.parent.parent
-    / "vendor" / "ygo-agent" / "scripts" / "battle.py"
-)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_BATTLE_SCRIPT = _PROJECT_ROOT / "vendor" / "ygo-agent" / "scripts" / "battle.py"
+_DEFAULT_CHECKPOINT = _PROJECT_ROOT / "checkpoints" / "agent.flax_model"
 
 
 @dataclass
@@ -39,11 +39,15 @@ class BattleResult:
 
 
 class BattleRunner:
-    def __init__(self, python_exe: str | None = None, xla_device: str = "cpu") -> None:
+    def __init__(
+        self,
+        checkpoint: str | None = None,
+        python_exe: str | None = None,
+        xla_device: str = "cpu",
+    ) -> None:
         if python_exe:
             self._python = python_exe
         elif venv := os.environ.get("YGOAGENT_VENV"):
-            # Prefer the venv's python which has JAX/ygoenv installed
             candidate = Path(venv) / "bin" / "python"
             if not candidate.exists():
                 candidate = Path(venv) / "Scripts" / "python.exe"
@@ -52,18 +56,28 @@ class BattleRunner:
             self._python = sys.executable
         self._xla_device = xla_device
 
+        if checkpoint is not None:
+            self._checkpoint = checkpoint
+        elif _DEFAULT_CHECKPOINT.exists():
+            self._checkpoint = str(_DEFAULT_CHECKPOINT)
+        else:
+            self._checkpoint = None
+
     def run(
         self,
         deck1: Deck,
         deck2: Deck,
         num_episodes: int = 128,
         seed: int = 0,
-        checkpoint: str | None = None,
     ) -> BattleResult:
         if not _BATTLE_SCRIPT.exists():
             raise FileNotFoundError(
                 f"battle.py not found at {_BATTLE_SCRIPT}. "
                 "Run: git submodule update --init --recursive"
+            )
+        if self._checkpoint is None:
+            raise FileNotFoundError(
+                "No RL checkpoint found. Train one first with: ygo-train --archetypes ..."
             )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -76,14 +90,14 @@ class BattleRunner:
             cmd = [
                 self._python, "-P", str(_BATTLE_SCRIPT),
                 "--xla_device", self._xla_device,
-                "--deck", str(tmp),   # LF temp dir avoids CRLF in vendor assets/deck
+                "--deck", str(tmp),
                 "--deck1", str(ydk1),
                 "--deck2", str(ydk2),
                 "--num-episodes", str(num_episodes),
                 "--seed", str(seed),
+                "--checkpoint1", self._checkpoint,
+                "--checkpoint2", self._checkpoint,
             ]
-            if checkpoint:
-                cmd += ["--checkpoint1", checkpoint, "--checkpoint2", checkpoint]
 
             result = subprocess.run(
                 cmd,
@@ -101,14 +115,11 @@ class BattleRunner:
 
     @staticmethod
     def _parse_output(stdout: str, d1_id: str, d2_id: str, episodes: int) -> BattleResult:
-        # battle.py prints something like:
-        #   win_rates: [0.53 0.47]
-        # or a payoff matrix block. Try to extract the first player's win rate.
-        match = re.search(r"win_rates?[:\s]+\[?\s*([\d.]+)", stdout, re.IGNORECASE)
+        # battle.py prints: len=..., reward=..., win_rate=0.53, win_reason=...
+        match = re.search(r"win_rates?[=:\s]+\[?\s*([\d.]+)", stdout, re.IGNORECASE)
         if match:
             wr1 = float(match.group(1))
         else:
-            # Fallback: look for a plain fraction
             match2 = re.search(r"([\d.]+)\s*/\s*\d+", stdout)
             wr1 = float(match2.group(1)) / episodes if match2 else 0.5
 

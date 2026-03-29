@@ -190,7 +190,7 @@ def main(
     episodes: int = typer.Option(3, help="Number of games to play"),
     seed: int = typer.Option(42, help="Random seed (also used for deck generation)"),
     provider: str = typer.Option("anthropic", help="LLM provider: anthropic or gemini"),
-    model: str = typer.Option(None, help="Model name (default: claude-opus-4-6 for anthropic, gemini-2.0-flash for gemini)"),
+    model: str = typer.Option(None, help="Model name (default: claude-opus-4-6 for anthropic, gemini-2.5-flash for gemini)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print each prompt and response"),
 ) -> None:
     """Play games with the LLM agent against a random or another LLM opponent."""
@@ -225,7 +225,7 @@ def main(
         console.print(f"[red]Unknown provider '{provider}'. Use 'anthropic' or 'gemini'.[/red]")
         raise typer.Exit(1)
 
-    _defaults = {"anthropic": "claude-opus-4-6", "gemini": "gemini-2.0-flash"}
+    _defaults = {"anthropic": "claude-opus-4-6", "gemini": "gemini-2.5-flash"}
     model = model or _defaults[provider]
 
     # --- Resolve deck path ---
