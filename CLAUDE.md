@@ -117,29 +117,30 @@ scripts/
 
 ## Essential Commands
 
-```bash
+> **Shell note:** All Python commands run inside WSL (the ygoenv/JAX venv lives at
+> `/home/ubuntu/.ygoagent_venv`). From **PowerShell** prefix every command with `wsl`.
+> Write commands as **one-liners** — no backslash line continuations, as PowerShell
+> does not support them.
+
+```powershell
 # First-time setup
-git submodule update --init --recursive
-pip install -e ".[dev]"
-python scripts/build_card_db.py          # build data/card_names.json
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && pip install -e '.[dev]'"
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && python scripts/build_card_db.py"
 
-# Start ygoinf inference server (required before playing)
-python -m ygo_meta.engine.runner start   # listens on localhost:3000
+# Play a game (random agent, no API key needed)
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.play --deck data/engines/K9Vanquishsoul/engine.ydk --evaluator random"
 
-# Play a game (LLM agent vs RL agent)
-python -m ygo_meta.cli.play --deck data/engines/snake_eye/engine.ydk
+# Play a game (Gemini LLM agent)
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.play --deck data/engines/K9Vanquishsoul/engine.ydk --evaluator llm --provider gemini"
 
-# Run meta simulation
-python -m ygo_meta.cli.simulate \
-  --archetypes snake_eye blue_eyes hero \
-  --staples-dir data/staples/ \
-  --episodes 128 --generations 10
+# Run meta simulation (random, fast)
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.simulate --archetypes K9Vanquishsoul --archetypes BrandedDracotail --archetypes RyzealMitsurugi --archetypes SolfachordYummy --staples-dir data/staples/ --episodes 16 --generations 3 --evaluator random"
+
+# Run meta simulation (Gemini LLM)
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.simulate --archetypes K9Vanquishsoul --archetypes BrandedDracotail --archetypes RyzealMitsurugi --archetypes SolfachordYummy --staples-dir data/staples/ --episodes 16 --generations 3 --evaluator llm --provider gemini"
 
 # Tests
-pytest tests/ -v
-
-# Lint
-ruff check src/ tests/
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && pytest tests/ -v"
 ```
 
 ---
