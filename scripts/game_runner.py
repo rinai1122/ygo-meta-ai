@@ -299,6 +299,11 @@ def main() -> None:
     parser.add_argument("--checkpoint", default=None, help="Path to RL agent .flax_model checkpoint")
     parser.add_argument("--llm-player", type=int, default=0, help="Which player index is LLM (0 or 1)")
     parser.add_argument("--num-embeddings", type=int, default=None, help="RL model embedding size (must match checkpoint)")
+    parser.add_argument("--num-layers", type=int, default=2, help="Model num_layers (must match checkpoint)")
+    parser.add_argument("--num-channels", type=int, default=128, help="Model num_channels (must match checkpoint)")
+    parser.add_argument("--rnn-channels", type=int, default=512, help="Model rnn_channels (must match checkpoint)")
+    parser.add_argument("--critic-width", type=int, default=128, help="Model critic_width (must match checkpoint)")
+    parser.add_argument("--critic-depth", type=int, default=3, help="Model critic_depth (must match checkpoint)")
     args = parser.parse_args()
 
     # code_list.txt has lines like "2511 1" (code + flag) but init_code_list
@@ -390,7 +395,14 @@ def main() -> None:
 
         obs_space = envs.observation_space
         _sample_obs = jax.tree.map(lambda x: jnp.array([x]), obs_space.sample())
-        rl_agent = RNNAgent(embedding_shape=args.num_embeddings)
+        rl_agent = RNNAgent(
+            embedding_shape=args.num_embeddings,
+            num_layers=args.num_layers,
+            num_channels=args.num_channels,
+            rnn_channels=args.rnn_channels,
+            critic_width=args.critic_width,
+            critic_depth=args.critic_depth,
+        )
         _key = jax.random.PRNGKey(args.seed)
         rl_rstate = rl_agent.init_rnn_state(1)
         rl_params = jax.jit(rl_agent.init)(_key, _sample_obs, rl_rstate)

@@ -2,3 +2,8 @@
 	path = vendor/ygo-agent
 	url = https://github.com/sbl1996/ygo-agent.git
 	ignore = untracked
+
+[submodule "vendor/ygopro-scripts"]
+	path = vendor/ygopro-scripts
+	url = https://github.com/mycard/ygopro-scripts.git
+	ignore = untracked

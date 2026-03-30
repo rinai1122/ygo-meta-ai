@@ -4,9 +4,12 @@ CLI: ygo-train
 Trains an RL agent via self-play PPO on the given deck pool.
 Wraps vendor/ygo-agent/scripts/cleanba.py with single-machine defaults.
 Saves checkpoint to checkpoints/agent.flax_model when done.
+Also saves checkpoints/model_args.json with the architecture so BattleRunner
+can load the right model shape.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -27,7 +30,11 @@ _CODE_LIST = (
     if (_PROJECT_ROOT / "data" / "code_list.txt").exists()
     else _VENDOR_SCRIPTS / "code_list.txt"
 )
-_TOKENS_YDK = _PROJECT_ROOT / "vendor" / "ygo-agent" / "assets" / "deck" / "unsupported" / "_tokens.ydk"
+
+# Small model preset for CPU / low-memory machines (fits in ~2GB WSL).
+_SMALL_MODEL = dict(num_layers=1, num_channels=32, rnn_channels=64, critic_width=32, critic_depth=1)
+# Full model (default cleanba settings)
+_FULL_MODEL  = dict(num_layers=2, num_channels=128, rnn_channels=512, critic_width=128, critic_depth=3)
 
 
 def _python_exe() -> list[str]:
@@ -47,8 +54,10 @@ def main(
     checkpoints_dir: Path = typer.Option(Path("checkpoints"), help="Where to save checkpoints"),
     n_variants: int = typer.Option(8, help="Deck variants per archetype to populate the training pool"),
     timesteps: int = typer.Option(5_000_000, help="Total training timesteps"),
-    num_envs: int = typer.Option(32, help="Parallel environments (8–64 for CPU)"),
+    num_envs: int = typer.Option(32, help="Parallel environments"),
     resume: Path = typer.Option(None, help="Resume from this .flax_model checkpoint"),
+    save_interval: int = typer.Option(100, help="Save checkpoint every N updates (lower for short debug runs)"),
+    small: bool = typer.Option(False, "--small", help="Use tiny model + minimal envs to fit in ~2GB RAM (CPU/low-memory machines)"),
 ) -> None:
     """Train RL agent via PPO self-play on the given deck pool."""
     if not _CLEANBA.exists():
@@ -61,9 +70,18 @@ def main(
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
     abs_ckpt_dir = checkpoints_dir.resolve()
 
-    # Round num_envs down to nearest multiple of 8 (cleanba batch-size constraint)
-    num_envs = max(8, (num_envs // 8) * 8)
-    num_minibatches = num_envs // 8
+    model = _SMALL_MODEL if small else _FULL_MODEL
+
+    if small:
+        # Override to absolute minimums for low-memory runs
+        num_envs = 2
+        num_steps = 32
+    else:
+        # Round to nearest multiple of 2; minimum 2
+        num_envs = max(2, (num_envs // 2) * 2)
+        num_steps = 128
+
+    num_minibatches = max(1, num_envs // 8)
 
     from ygo_meta.deck_builder.generator import generate_all_decks
     from ygo_meta.deck_builder.ydk_parser import write_ydk
@@ -72,7 +90,6 @@ def main(
     with tempfile.TemporaryDirectory() as tmpdir:
         deck_dir = Path(tmpdir)
 
-        # Generate full decks (engine + staple combos) — same as the simulation does
         decks = generate_all_decks(
             engines_dir=engines_dir,
             staples_dir=staples_dir,
@@ -87,17 +104,11 @@ def main(
         for deck in decks:
             write_ydk(deck, deck_dir / f"{deck.variant_id}.ydk")
 
-        # Copy token deck so the compiled ygopro binary preloads token card data.
-        # init_ygopro reads ALL *.ydk files in deck_dir; names starting with '_'
-        # are excluded from the game pool but still passed to init_module, which
-        # calls preload_deck() for them — loading token cards_data_ entries that
-        # would otherwise be missing (causing card_reader_callback SIGABRT).
-        if _TOKENS_YDK.exists():
-            shutil.copy2(_TOKENS_YDK, deck_dir / "_tokens.ydk")
-
-        console.print(f"[bold green]YGO RL Training[/bold green]")
+        mode_label = "small (low-memory)" if small else "full"
+        console.print(f"[bold green]YGO RL Training[/bold green]  [{mode_label}]")
         console.print(f"Archetypes : {archetypes}  ({len(decks)} deck variants in pool)")
         console.print(f"Steps      : {timesteps:,}  |  Envs: {num_envs}  |  Minibatches: {num_minibatches}")
+        console.print(f"Model      : ch={model['num_channels']} rnn={model['rnn_channels']} layers={model['num_layers']}")
         console.print(f"Ckpt dir   : {abs_ckpt_dir}\n")
 
         cmd = _python_exe() + [
@@ -107,13 +118,26 @@ def main(
             "--ckpt_dir", str(abs_ckpt_dir),
             "--total_timesteps", str(timesteps),
             "--local_num_envs", str(num_envs),
+            "--local_env_threads", "1",
+            "--num_steps", str(num_steps),
             "--num_actor_threads", "1",
             "--num_minibatches", str(num_minibatches),
             "--actor_device_ids", "0",
             "--learner_device_ids", "0",
             "--no-concurrency",
-            "--save_interval", "100",
-            "--tb_dir", "None",
+            "--save_interval", str(save_interval),
+            "--tb_dir", str(abs_ckpt_dir / "tb"),
+            "--timeout", "3600",
+            f"--m1.num-layers", str(model["num_layers"]),
+            f"--m1.num-channels", str(model["num_channels"]),
+            f"--m1.rnn-channels", str(model["rnn_channels"]),
+            f"--m1.critic-width", str(model["critic_width"]),
+            f"--m1.critic-depth", str(model["critic_depth"]),
+            f"--m2.num-layers", str(model["num_layers"]),
+            f"--m2.num-channels", str(model["num_channels"]),
+            f"--m2.rnn-channels", str(model["rnn_channels"]),
+            f"--m2.critic-width", str(model["critic_width"]),
+            f"--m2.critic-depth", str(model["critic_depth"]),
         ]
         if resume:
             cmd += ["--checkpoint", str(resume.resolve())]
@@ -121,10 +145,12 @@ def main(
         env = {
             **os.environ,
             "JAX_PLATFORMS": "cpu",
-            # Disable AOT-compiled kernels; avoids SIGILL on CPUs that lack
-            # prefer-no-gather / prefer-no-scatter LLVM pseudo-features that
-            # jaxlib was compiled with but the WSL host CPU doesn't expose.
             "XLA_FLAGS": "--xla_cpu_use_thunk_runtime=false",
+            # Force JAX to use platform (glibc) allocator instead of its custom BFC
+            # allocator. Without this, JAX's allocator and ygoenv's glibc allocator
+            # corrupt each other's heap metadata → SIGABRT in ygoenv.make().
+            "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
+            "XLA_PYTHON_CLIENT_ALLOCATOR": "platform",
         }
         result = subprocess.run(cmd, cwd=str(_VENDOR_SCRIPTS), env=env)
 
@@ -140,8 +166,12 @@ def main(
     if latest:
         dest = abs_ckpt_dir / "agent.flax_model"
         shutil.copy2(latest, dest)
-        console.print(f"\n[bold green]Training complete. Checkpoint saved: {dest}[/bold green]")
-        console.print("Run evolution with: ygo-simulate --archetypes ...")
+        # Save model architecture so BattleRunner can load the right shape
+        args_path = abs_ckpt_dir / "model_args.json"
+        args_path.write_text(json.dumps(model))
+        console.print(f"\n[bold green]Training complete. Checkpoint: {dest}[/bold green]")
+        console.print(f"Model args : {args_path}")
+        console.print("Run simulation: ygo-simulate --evaluator rl --archetypes ...")
     else:
         console.print("[yellow]Training ended but no checkpoint was written.[/yellow]")
 

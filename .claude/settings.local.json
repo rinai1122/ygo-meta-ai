@@ -3,7 +3,8 @@
     "allow": [
       "Bash(wsl bash:*)",
       "Bash(\"C:/Users/sungj/Desktop/Sample/ygo-agent/train_out.txt\")",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(git:*)"
     ],
     "defaultMode": "bypassPermissions"
   }
