@@ -97,10 +97,18 @@ def solve_nash(matrix: np.ndarray) -> NashSolution:
                 sigma1 = np.clip(sigma1, 0, None)
                 total = sigma1.sum()
                 if total > 1e-10:
-                    return NashSolution(sigma=sigma1 / total, method="nashpy")
+                    solution = NashSolution(sigma=sigma1 / total, method="nashpy")
+                    assert abs(solution.sigma.sum() - 1.0) < 1e-6, (
+                        f"Nash sigma sum = {solution.sigma.sum()}, expected 1.0"
+                    )
+                    return solution
         except Exception:
             pass
 
-    # Fallback: LP
+    # Fallback: LP (nashpy support_enumeration is exponential for large D)
     sigma = _solve_lp(matrix)
-    return NashSolution(sigma=sigma, method="lp")
+    solution = NashSolution(sigma=sigma, method="lp")
+    assert abs(solution.sigma.sum() - 1.0) < 1e-6, (
+        f"Nash sigma sum = {solution.sigma.sum()}, expected 1.0"
+    )
+    return solution

@@ -50,7 +50,7 @@ def main(
     runner = None
     if evaluator == "rl":
         from ygo_meta.simulation.battle_runner import BattleRunner
-        runner = BattleRunner(checkpoint=str(checkpoint) if checkpoint else None)
+        runner = BattleRunner(checkpoint=str(checkpoint.resolve()) if checkpoint else None)
     elif evaluator == "llm":
         from ygo_meta.simulation.llm_battle_runner import LLMBattleRunner
         runner = LLMBattleRunner(provider=provider, model=model, verbose=verbose)
@@ -99,6 +99,17 @@ def main(
 
     console.print(table)
     console.print(f"\nResults saved to: {results_dir}/nash_solutions/")
+
+    # Show saved deck files from the final generation
+    if history:
+        final = history[-1]
+        if final.deck_files:
+            console.print(f"\n[bold green]Top decks saved to:[/bold green]")
+            for deck_path in final.deck_files:
+                console.print(f"  {deck_path}")
+            console.print(f"\n[dim]Open in deck editor:[/dim]")
+            for deck_path in final.deck_files:
+                console.print(f"  python scripts/deck_editor.py {deck_path}")
 
 
 if __name__ == "__main__":

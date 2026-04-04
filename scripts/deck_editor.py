@@ -263,13 +263,21 @@ class ImageTooltip:
             self._tip = None
 
 
-# ─── Scrollable card list widget ──────────────────────────────────────────────
+# ─── Scrollable card image grid ────────────────────────────────────────────────────
 
 class CardScrollList(tk.Frame):
     """
-    Deck section display: scrollable frame with one row per unique card.
-    Each row shows: [ban prefix] [copy dots] [card name] [− remove one] [× remove all]
+    Deck section display: scrollable grid of card images.
+    Each cell shows: card image + copy count badge + small name text.
+    Left-click removes one copy; right-click removes all copies.
     """
+
+    THUMB_W, THUMB_H = 68, 100
+    CELL_W = 82
+
+    _grid_cache: dict[int, object] = {}   # code -> grid-sized PhotoImage | None
+    _grid_pending: set[int] = set()
+    _grid_photos: list = []               # prevent GC of PhotoImages
 
     def __init__(
         self,
@@ -287,6 +295,8 @@ class CardScrollList(tk.Frame):
         self._on_remove_one = on_remove_one
         self._on_remove_all = on_remove_all
         self._tooltips: list[ImageTooltip] = []
+        self._tiles: list[tuple[tk.Frame, int]] = []
+        self._cols: int = 0
 
         self._canvas = tk.Canvas(self, bg=bg, bd=0, highlightthickness=0)
         self._sb = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
@@ -296,7 +306,6 @@ class CardScrollList(tk.Frame):
 
         self._inner = tk.Frame(self._canvas, bg=bg)
         self._win_id = self._canvas.create_window((0, 0), window=self._inner, anchor="nw")
-
         self._inner.bind("<Configure>", self._on_inner_cfg)
         self._canvas.bind("<Configure>", self._on_canvas_cfg)
         for w in (self._canvas, self._inner):
@@ -307,6 +316,10 @@ class CardScrollList(tk.Frame):
 
     def _on_canvas_cfg(self, event: tk.Event) -> None:
         self._canvas.itemconfig(self._win_id, width=event.width)
+        new_cols = max(1, event.width // self.CELL_W)
+        if new_cols != self._cols:
+            self._cols = new_cols
+            self._reflow()
 
     def _on_wheel(self, event: tk.Event) -> None:
         self._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -315,6 +328,7 @@ class CardScrollList(tk.Frame):
         self._tooltips.clear()
         for w in self._inner.winfo_children():
             w.destroy()
+        self._tiles.clear()
 
         # Group preserving first-occurrence order
         seen: dict[int, int] = {}
@@ -326,57 +340,129 @@ class CardScrollList(tk.Frame):
             seen[code] += 1
 
         for code in order:
-            self._add_row(code, seen[code])
+            tile = self._make_tile(code, seen[code])
+            self._tiles.append((tile, code))
 
+        self._cols = 0
+        self._inner.update_idletasks()
+        w = self._canvas.winfo_width()
+        if w > 1:
+            self._cols = max(1, w // self.CELL_W)
+        self._reflow()
+        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+
+        # Prefetch images for all cards in the deck
+        self._prefetch(order)
+
+    def _make_tile(self, code: int, copies: int) -> tk.Frame:
+        prefix, color = card_display_info(self.card_info, code)
+
+        tile = tk.Frame(self._inner, bg=COLOR_PANEL)
+
+        # Image container (fixed size)
+        img_frame = tk.Frame(tile, bg="#222222", width=self.THUMB_W, height=self.THUMB_H)
+        img_frame.pack_propagate(False)
+        img_frame.pack(side="top", padx=5, pady=(3, 0))
+
+        img_lbl = tk.Label(img_frame, bg="#222222", text="", fg="#555")
+        img_lbl.pack(fill="both", expand=True)
+
+        # Show cached image immediately if available
+        cached = CardScrollList._grid_cache.get(code)
+        if cached:
+            img_lbl.configure(image=cached)
+            img_lbl.image = cached
+
+        # Copy count badge (top-right of image)
+        if copies > 1:
+            badge = tk.Label(img_frame, text=f"x{copies}", bg=COLOR_HIGHLIGHT, fg="white",
+                             font=("Consolas", 7, "bold"), padx=2, pady=0)
+            badge.place(relx=1.0, rely=0.0, anchor="ne")
+            badge.bind("<Button-1>", lambda e, c=code: self._on_remove_one(c))
+            badge.bind("<Button-3>", lambda e, c=code: self._on_remove_all(c))
+
+        # Card name (small text below image)
+        name = self._card_db.get(code, f"#{code}")
+        short = (name[:10] + "…") if len(name) > 11 else name
+        name_lbl = tk.Label(tile, text=short, bg=COLOR_PANEL, fg=color,
+                            font=("Segoe UI", 7), anchor="center")
+        name_lbl.pack(side="top", fill="x", padx=1)
+
+        # Tooltip on hover (shows full-size image + full name)
+        tip = ImageTooltip(tile, code)
+        self._tooltips.append(tip)
+
+        # Click bindings: left = remove one, right = remove all
+        for w in (tile, img_frame, img_lbl, name_lbl):
+            w.bind("<Button-1>", lambda e, c=code: self._on_remove_one(c))
+            w.bind("<Button-3>", lambda e, c=code: self._on_remove_all(c))
+            w.bind("<MouseWheel>", self._on_wheel)
+
+        tile._img_lbl = img_lbl  # reference for async image update
+        return tile
+
+    def _reflow(self) -> None:
+        if not self._tiles:
+            return
+        cols = max(1, self._cols) if self._cols else 1
+        for i, (tile, _) in enumerate(self._tiles):
+            r, c = divmod(i, cols)
+            tile.grid(row=r, column=c, padx=1, pady=1, sticky="nw")
         self._inner.update_idletasks()
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
 
-    def _add_row(self, code: int, copies: int) -> None:
-        prefix, color = card_display_info(self.card_info, code)
+    def _prefetch(self, codes: list[int]) -> None:
+        for code in codes:
+            if code in CardScrollList._grid_cache or code in CardScrollList._grid_pending:
+                continue
+            CardScrollList._grid_pending.add(code)
+            threading.Thread(
+                target=self._fetch_grid_image, args=(code,), daemon=True
+            ).start()
 
-        row = tk.Frame(self._inner, bg=COLOR_PANEL, pady=2)
-        row.pack(fill="x", padx=2)
-        row.bind("<MouseWheel>", self._on_wheel)
+    def _fetch_grid_image(self, code: int) -> None:
+        url = f"{IMAGE_BASE_URL}/{code}.jpg"
+        try:
+            if not PIL_AVAILABLE:
+                raise ImportError("Pillow not installed")
+            req = urllib.request.Request(url, headers={"User-Agent": "ygo-meta-ai/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+            pil_img = PILImage.open(io.BytesIO(data))
+            grid_copy = pil_img.copy()
+            grid_copy.thumbnail((self.THUMB_W, self.THUMB_H), PILImage.LANCZOS)
+            tip_copy = pil_img.copy()
+            tip_copy.thumbnail((177, 254), PILImage.LANCZOS)
+            try:
+                self._canvas.after(0, lambda: self._on_img_ready(code, grid_copy, tip_copy))
+            except tk.TclError:
+                CardScrollList._grid_pending.discard(code)
+        except Exception:
+            CardScrollList._grid_cache[code] = None
+            CardScrollList._grid_pending.discard(code)
 
-        # Ban/MD prefix — always reserve fixed width for alignment
-        pfx_lbl = tk.Label(row, text=prefix, bg=COLOR_PANEL, fg=color,
-                           font=("Consolas", 8, "bold"), width=4, anchor="w")
-        pfx_lbl.pack(side="left")
-        pfx_lbl.bind("<MouseWheel>", self._on_wheel)
+    def _on_img_ready(self, code: int, grid_pil, tip_pil) -> None:
+        try:
+            grid_photo = ImageTk.PhotoImage(grid_pil)
+            CardScrollList._grid_cache[code] = grid_photo
+            CardScrollList._grid_photos.append(grid_photo)
+            if code not in ImageTooltip._cache:
+                tip_photo = ImageTk.PhotoImage(tip_pil)
+                ImageTooltip._cache[code] = tip_photo
+                CardScrollList._grid_photos.append(tip_photo)
+        except Exception:
+            CardScrollList._grid_cache[code] = None
+        finally:
+            CardScrollList._grid_pending.discard(code)
 
-        # Copy bullets
-        bullets = "●" * copies + "○" * (MAX_COPIES - copies)
-        dot_lbl = tk.Label(row, text=bullets, bg=COLOR_PANEL, fg=COLOR_HIGHLIGHT,
-                           font=("Segoe UI", 9))
-        dot_lbl.pack(side="left", padx=(0, 4))
-        dot_lbl.bind("<MouseWheel>", self._on_wheel)
-
-        # Buttons — pack RIGHT before the name so name fills remaining space
-        def rm_all(c: int = code) -> None:
-            self._on_remove_all(c)
-
-        def rm_one(c: int = code) -> None:
-            self._on_remove_one(c)
-
-        tk.Button(row, text="×", command=rm_all,
-                  bg=COLOR_HIGHLIGHT, fg="white", relief="flat",
-                  font=("Segoe UI", 10, "bold"), padx=6, pady=0,
-                  cursor="hand2", bd=0).pack(side="right", padx=(1, 2))
-        tk.Button(row, text="−", command=rm_one,
-                  bg=COLOR_ACCENT, fg=COLOR_TEXT, relief="flat",
-                  font=("Segoe UI", 10, "bold"), padx=6, pady=0,
-                  cursor="hand2", bd=0).pack(side="right", padx=1)
-
-        # Card name fills remaining width
-        name = self._card_db.get(code, f"#{code}")
-        name_lbl = tk.Label(row, text=name, bg=COLOR_PANEL, fg=color,
-                            font=("Segoe UI", 10), anchor="w")
-        name_lbl.pack(side="left", fill="x", expand=True)
-        name_lbl.bind("<MouseWheel>", self._on_wheel)
-
-        # Image tooltip on hover
-        tip = ImageTooltip(name_lbl, code)
-        self._tooltips.append(tip)
+        # Update tile image
+        for tile, c in self._tiles:
+            if c == code:
+                img = CardScrollList._grid_cache.get(code)
+                if img:
+                    tile._img_lbl.configure(image=img, text="")
+                    tile._img_lbl.image = img
+                break
 
 
 # ─── Main application ─────────────────────────────────────────────────────────
@@ -386,8 +472,8 @@ class DeckEditor(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("YGO Deck Editor")
-        self.geometry("1240x780")
-        self.minsize(960, 640)
+        self.geometry("1400x820")
+        self.minsize(1060, 680)
         self.configure(bg=COLOR_BG)
 
         self._card_db: dict[int, str] = load_card_db()
@@ -477,7 +563,7 @@ class DeckEditor(tk.Tk):
         left  = ttk.Frame(paned)
         right = ttk.Frame(paned)
         paned.add(left,  weight=1)
-        paned.add(right, weight=2)
+        paned.add(right, weight=3)
 
         self._build_search_panel(left)
         self._build_deck_panel(right)
@@ -535,7 +621,7 @@ class DeckEditor(tk.Tk):
         ttk.Label(parent, textvariable=self._result_count_var,
                   foreground="#888888", font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 0))
         ttk.Label(parent,
-                  text="Double-click or ➕ to add  •  Hover card name for image",
+                  text="Double-click or ➕ to add  •  L-click deck card to remove",
                   foreground="#555555", font=("Segoe UI", 8)).pack(anchor="w")
 
         self._results_data: list[int] = []
@@ -973,5 +1059,21 @@ class DeckEditor(tk.Tk):
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import sys
     app = DeckEditor()
+    # Open a YDK file passed as CLI argument
+    if len(sys.argv) > 1:
+        p = Path(sys.argv[1])
+        if p.exists() and p.suffix.lower() == ".ydk":
+            try:
+                main, extra, side = parse_ydk(p)
+                app._main = main
+                app._extra = extra
+                app._current_file = p
+                app._file_label.config(text=str(p), foreground=COLOR_TEXT)
+                app.title(f"YGO Deck Editor — {p.name}")
+                app._refresh_all()
+                app._set_status(f"Loaded '{p.name}' — {len(main)} main, {len(extra)} extra.")
+            except Exception as exc:
+                messagebox.showerror("Load Error", str(exc))
     app.mainloop()

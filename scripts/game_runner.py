@@ -343,17 +343,38 @@ def main() -> None:
         _lf_copy.write_bytes(deck_src.read_bytes().replace(b"\r\n", b"\n"))
         _deck_arg = str(_lf_copy)
 
+    # Write _tokens.ydk so the C++ engine can preload token card data (e.g. Primal
+    # Being Token 27204312 summoned by Nibiru).  Without this the engine crashes with
+    # "[card_reader_callback] Card not found" when a token is summoned mid-game.
+    _vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "ygo-agent"
+    _cdb = _vendor_root / "assets" / "locale" / "en" / "cards.cdb"
+    if _cdb.exists():
+        import sqlite3 as _sqlite3
+        TYPE_TOKEN = 0x4000
+        _con = _sqlite3.connect(str(_cdb))
+        _token_ids = [r[0] for r in _con.execute(
+            "SELECT id FROM datas WHERE (type & ?) != 0", (TYPE_TOKEN,)
+        ).fetchall()]
+        _con.close()
+        _tokens_ydk = Path(_tmp_deck_dir) / "_tokens.ydk"
+        with open(_tokens_ydk, "w") as _f:
+            _f.write("#main\n")
+            for _tid in _token_ids:
+                _f.write(f"{_tid}\n")
+            _f.write("#extra\n#side\n")
+
     # Initialize ygoenv via ygoai helper (registers deck files in C++ module).
     # The ygopro-core binary reads card Lua scripts as "./script/c{code}.lua"
     # relative to the process CWD — both at init time AND at duel creation time.
     # The scripts live at vendor/ygo-agent/scripts/script/ (symlink → ygopro-scripts).
     # Set CWD to vendor scripts dir and keep it there for the lifetime of this process.
     import os as _os
-    _vendor_scripts = Path(__file__).resolve().parent.parent / "vendor" / "ygo-agent" / "scripts"
+    _vendor_scripts = _vendor_root / "scripts"
     if _vendor_scripts.is_dir():
         _os.chdir(str(_vendor_scripts))
     from ygoai.utils import init_ygopro
-    deck_name = init_ygopro(args.env_id, "english", _deck_arg, args.code_list)
+    _preload = _cdb.exists()
+    deck_name = init_ygopro(args.env_id, "english", _deck_arg, args.code_list, preload_tokens=_preload)
     deck1 = args.deck1 or deck_name
     deck2 = args.deck2 or deck1
 

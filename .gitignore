@@ -12,9 +12,14 @@ venv/
 # card_names.json is committed — regenerate with scripts/build_card_db.py after submodule updates
 # data/card_names.json
 
-# Results (large binary/json files)
+# Results (generated output — regenerate via simulation/training)
 results/payoff_matrices/*.npy
+results/payoff_matrices/*_deck_ids.json
 results/nash_solutions/*.json
+results/decks/
+
+# Training checkpoints
+checkpoints/
 
 # Build
 dist/

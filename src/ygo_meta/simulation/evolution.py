@@ -23,6 +23,7 @@ import numpy as np
 
 from ygo_meta.deck_builder.deck_model import Deck
 from ygo_meta.deck_builder.generator import generate_all_decks
+from ygo_meta.deck_builder.ydk_parser import write_ydk
 from ygo_meta.simulation.battle_runner import BattleRunner
 from ygo_meta.simulation.nash import NashSolution, solve_nash
 from ygo_meta.simulation.payoff_matrix import PayoffMatrix, build_matrix
@@ -36,6 +37,7 @@ class GenerationResult:
     top_decks: list[dict]
     converged: bool
     method: str
+    deck_files: list[str] = None  # paths to saved top-deck YDK files
 
 
 def _mutate_staple_combo(
@@ -198,6 +200,20 @@ def run_evolution(
         )
         history.append(gen_result)
 
+        # Save top decks as YDK files
+        dk_dir = results_dir / "decks" / f"gen_{gen:03d}"
+        dk_dir.mkdir(parents=True, exist_ok=True)
+        deck_map_save = {d.variant_id: d for d in decks}
+        deck_files: list[str] = []
+        for t in top:
+            did = t["deck_id"]
+            deck_obj = deck_map_save.get(did)
+            if deck_obj:
+                ydk_path = dk_dir / f"{did}.ydk"
+                write_ydk(deck_obj, ydk_path)
+                deck_files.append(str(ydk_path))
+        gen_result.deck_files = deck_files
+
         ns_path = ns_dir / f"gen_{gen:03d}.json"
         ns_path.write_text(json.dumps(asdict(gen_result), indent=2), encoding="utf-8")
         print(f"  Nash ({solution.method}): top decks = {[t['deck_id'] for t in top]}")
@@ -255,6 +271,12 @@ def run_evolution(
                 )
                 new_decks.extend(fill)
 
-        decks = new_decks
+        # Deduplicate by variant_id — generate_decks reuses v000..v00N IDs,
+        # and duplicate IDs cause NaN in the payoff matrix (PayoffMatrix._idx
+        # maps each ID to only the last occurrence, leaving earlier rows unfilled).
+        seen: dict[str, Deck] = {}
+        for d in new_decks:
+            seen[d.variant_id] = d
+        decks = list(seen.values())
 
     return history
