@@ -39,13 +39,24 @@ _SMALL_MODEL = dict(num_layers=1, num_channels=32, rnn_channels=64, critic_width
 _FULL_MODEL  = dict(num_layers=2, num_channels=128, rnn_channels=512, critic_width=128, critic_depth=3)
 
 
+def _has_nvidia_gpu() -> bool:
+    """Return True if an NVIDIA GPU is physically present."""
+    try:
+        import subprocess as _sp
+        return _sp.run(
+            ["nvidia-smi"], capture_output=True, timeout=10,
+        ).returncode == 0
+    except Exception:
+        return False
+
+
 def _detect_jax_platform() -> str:
     """Return the best available JAX platform ('gpu', 'cuda', 'rocm', or 'cpu').
 
     Forces full backend initialization via ``jax.local_devices()`` to verify the
     backend actually works — ``jax.default_backend()`` can report 'gpu' even when
-    the GPU backend fails to initialize (e.g. jaxlib missing ROCm support).
-    Falls back to 'cpu' if GPU init fails.
+    the GPU backend fails to initialize (e.g. jaxlib missing CUDA/ROCm support).
+    Falls back to 'cpu' with a warning if a GPU is present but JAX can't use it.
     """
     _probe = (
         "import jax; jax.local_devices(); print(jax.default_backend())"
@@ -63,6 +74,15 @@ def _detect_jax_platform() -> str:
                 return backend
     except Exception:
         pass
+    # GPU exists but JAX can't use it — warn the user.
+    if _has_nvidia_gpu():
+        from rich.console import Console
+        Console(stderr=True).print(
+            "[bold yellow]WARNING:[/bold yellow] NVIDIA GPU detected but JAX "
+            "cannot use it — jaxlib was installed without CUDA support.\n"
+            "  Fix: pip install -U 'jax[cuda12]<=0.4.28'\n"
+            "  Falling back to CPU training (will be much slower).\n"
+        )
     return "cpu"
 
 
