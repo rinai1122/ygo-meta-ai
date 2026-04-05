@@ -42,20 +42,25 @@ _FULL_MODEL  = dict(num_layers=2, num_channels=128, rnn_channels=512, critic_wid
 def _detect_jax_platform() -> str:
     """Return the best available JAX platform ('gpu', 'cuda', 'rocm', or 'cpu').
 
-    Uses ``JAX_PLATFORMS=''`` so JAX auto-detects available backends instead of
-    inheriting an explicit (and possibly broken) ``JAX_PLATFORMS`` from the
-    parent environment.
+    Forces full backend initialization via ``jax.local_devices()`` to verify the
+    backend actually works — ``jax.default_backend()`` can report 'gpu' even when
+    the GPU backend fails to initialize (e.g. jaxlib missing ROCm support).
+    Falls back to 'cpu' if GPU init fails.
     """
+    _probe = (
+        "import jax; jax.local_devices(); print(jax.default_backend())"
+    )
     try:
         import subprocess as _sp
         env = {**os.environ, "JAX_PLATFORMS": ""}
         result = _sp.run(
-            _python_exe() + ["-c", "import jax; print(jax.default_backend())"],
+            _python_exe() + ["-c", _probe],
             capture_output=True, text=True, timeout=30, env=env,
         )
-        backend = result.stdout.strip().lower()
-        if backend in ("gpu", "cuda", "rocm"):
-            return backend
+        if result.returncode == 0:
+            backend = result.stdout.strip().lower()
+            if backend in ("gpu", "cuda", "rocm"):
+                return backend
     except Exception:
         pass
     return "cpu"
