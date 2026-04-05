@@ -129,14 +129,12 @@ class BattleRunner:
                 "--critic-depth", str(self._model_args["critic_depth"]),
             ]
 
+            jax_platform = os.environ.get("JAX_PLATFORMS", "cpu")
             env = {
                 **os.environ,
-                # Prevent JAX's custom BFC allocator from corrupting glibc heap
-                # when ygoenv and JAX share the same process. Without this, the
-                # RL agent's JAX calls cause SIGABRT/double-free during gameplay.
                 "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
                 "XLA_PYTHON_CLIENT_ALLOCATOR": "platform",
-                "JAX_PLATFORMS": "cpu",
+                "JAX_PLATFORMS": jax_platform,
             }
             proc = subprocess.Popen(
                 cmd,

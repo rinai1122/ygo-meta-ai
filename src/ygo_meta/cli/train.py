@@ -39,6 +39,22 @@ _SMALL_MODEL = dict(num_layers=1, num_channels=32, rnn_channels=64, critic_width
 _FULL_MODEL  = dict(num_layers=2, num_channels=128, rnn_channels=512, critic_width=128, critic_depth=3)
 
 
+def _detect_jax_platform() -> str:
+    """Return 'gpu' if CUDA is available, else 'cpu'."""
+    try:
+        import subprocess as _sp
+        result = _sp.run(
+            _python_exe() + ["-c", "import jax; print(jax.default_backend())"],
+            capture_output=True, text=True, timeout=30,
+        )
+        backend = result.stdout.strip().lower()
+        if backend in ("gpu", "cuda"):
+            return "gpu"
+    except Exception:
+        pass
+    return "cpu"
+
+
 def _python_exe() -> list[str]:
     venv = os.environ.get("YGOAGENT_VENV", "")
     if venv:
@@ -185,11 +201,13 @@ def main(
         # from cards_data_ at runtime → [card_reader_callback] Card not found crash.
         _write_tokens_ydk(deck_dir)
 
+        jax_platform = _detect_jax_platform()
         mode_label = "small (low-memory)" if small else "full"
         console.print(f"[bold green]YGO RL Training[/bold green]  [{mode_label}]")
         console.print(f"Archetypes : {archetypes}  ({len(decks)} deck variants in pool)")
         console.print(f"Steps      : {timesteps:,}  |  Envs: {num_envs}  |  Minibatches: {num_minibatches}")
         console.print(f"Model      : ch={model['num_channels']} rnn={model['rnn_channels']} layers={model['num_layers']}")
+        console.print(f"JAX backend: {jax_platform}")
         console.print(f"Ckpt dir   : {abs_ckpt_dir}\n")
 
         # Write a thin wrapper that enables preload_tokens=True in init_ygopro
@@ -203,27 +221,23 @@ def main(
         # Fix: combine all flags here and force-initialize JAX before runpy executes
         # cleanba.py, so cleanba's os.environ overwrite is a no-op (XLA is already up).
         _CLEANBA_XLA_FLAGS = "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+        use_gpu = jax_platform == "gpu"
+        if use_gpu:
+            xla_flags_str = repr(_CLEANBA_XLA_FLAGS)
+        else:
+            xla_flags_str = repr(_CLEANBA_XLA_FLAGS + " --xla_cpu_use_thunk_runtime=false")
         wrapper = deck_dir / "_cleanba_wrapper.py"
         wrapper.write_text(
             "import os\n"
-            # Combine cleanba's own flags with ours before JAX initializes.
-            f"os.environ['XLA_FLAGS'] = {(_CLEANBA_XLA_FLAGS + ' --xla_cpu_use_thunk_runtime=false')!r}\n"
-            # Set allocator flags explicitly in case the inherited env is stale.
-            # JAX on CPU must use the platform (glibc) allocator; otherwise its
-            # custom allocator and ygoenv's glibc heap corrupt each other → SIGABRT.
+            f"os.environ['XLA_FLAGS'] = {xla_flags_str}\n"
             "os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'\n"
             "os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'\n"
-            # Force XLA to initialize NOW so cleanba.py's module-level os.environ
-            # overwrite (line 35) cannot remove --xla_cpu_use_thunk_runtime=false.
             "import jax as _jax; _jax.local_devices()\n"
             "import ygoai.utils as _u\n"
             "_orig = _u.init_ygopro\n"
             "def _patched(env_id, lang, deck, code_list_file, preload_tokens=False, return_deck_names=False):\n"
             "    return _orig(env_id, lang, deck, code_list_file, preload_tokens=True, return_deck_names=return_deck_names)\n"
             "_u.init_ygopro = _patched\n"
-            # cleanba.py uses SimpleNamespace() as a dummy TensorBoard writer but
-            # never adds close() to it, then calls writer.close() at the end.
-            # Patch SimpleNamespace so all instances have a no-op close().
             "import types as _t; _orig_SN = _t.SimpleNamespace\n"
             "class _NS(_orig_SN):\n"
             "    def close(self): pass\n"
@@ -268,19 +282,13 @@ def main(
 
         env = {
             **os.environ,
-            "JAX_PLATFORMS": "cpu",
-            "XLA_FLAGS": "--xla_cpu_use_thunk_runtime=false",
-            # Force JAX to use platform (glibc) allocator instead of its custom BFC
-            # allocator. Without this, JAX's allocator and ygoenv's glibc allocator
-            # corrupt each other's heap metadata → SIGABRT in ygoenv.make().
+            "JAX_PLATFORMS": jax_platform,
             "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
             "XLA_PYTHON_CLIENT_ALLOCATOR": "platform",
-            # Unbuffered stdout so crash messages and Python output appear in order.
-            # Without this, Python's block-buffered stdout through the pipe means
-            # crash messages (written directly to stderr fd) appear before buffered
-            # Python output, making it look like the crash happens earlier than it does.
             "PYTHONUNBUFFERED": "1",
         }
+        if not use_gpu:
+            env["XLA_FLAGS"] = "--xla_cpu_use_thunk_runtime=false"
         result = _run_with_heartbeat(cmd, cwd=str(_VENDOR_SCRIPTS), env=env)
 
     if result.returncode != 0:
