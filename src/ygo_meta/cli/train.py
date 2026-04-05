@@ -40,12 +40,18 @@ _FULL_MODEL  = dict(num_layers=2, num_channels=128, rnn_channels=512, critic_wid
 
 
 def _detect_jax_platform() -> str:
-    """Return 'gpu' if CUDA is available, else 'cpu'."""
+    """Return the best available JAX platform ('gpu', 'cuda', 'rocm', or 'cpu').
+
+    Uses ``JAX_PLATFORMS=''`` so JAX auto-detects available backends instead of
+    inheriting an explicit (and possibly broken) ``JAX_PLATFORMS`` from the
+    parent environment.
+    """
     try:
         import subprocess as _sp
+        env = {**os.environ, "JAX_PLATFORMS": ""}
         result = _sp.run(
             _python_exe() + ["-c", "import jax; print(jax.default_backend())"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, env=env,
         )
         backend = result.stdout.strip().lower()
         if backend in ("gpu", "cuda", "rocm"):
@@ -282,7 +288,7 @@ def main(
 
         env = {
             **os.environ,
-            "JAX_PLATFORMS": os.environ.get("JAX_PLATFORMS", jax_platform),
+            "JAX_PLATFORMS": jax_platform,
             "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
             "XLA_PYTHON_CLIENT_ALLOCATOR": "platform",
             "PYTHONUNBUFFERED": "1",
