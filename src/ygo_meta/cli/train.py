@@ -48,8 +48,8 @@ def _detect_jax_platform() -> str:
             capture_output=True, text=True, timeout=30,
         )
         backend = result.stdout.strip().lower()
-        if backend in ("gpu", "cuda"):
-            return "gpu"
+        if backend in ("gpu", "cuda", "rocm"):
+            return backend
     except Exception:
         pass
     return "cpu"
@@ -221,7 +221,7 @@ def main(
         # Fix: combine all flags here and force-initialize JAX before runpy executes
         # cleanba.py, so cleanba's os.environ overwrite is a no-op (XLA is already up).
         _CLEANBA_XLA_FLAGS = "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
-        use_gpu = jax_platform == "gpu"
+        use_gpu = jax_platform in ("gpu", "cuda", "rocm")
         if use_gpu:
             xla_flags_str = repr(_CLEANBA_XLA_FLAGS)
         else:
@@ -282,7 +282,7 @@ def main(
 
         env = {
             **os.environ,
-            "JAX_PLATFORMS": jax_platform,
+            "JAX_PLATFORMS": os.environ.get("JAX_PLATFORMS", jax_platform),
             "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
             "XLA_PYTHON_CLIENT_ALLOCATOR": "platform",
             "PYTHONUNBUFFERED": "1",
