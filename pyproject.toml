@@ -28,8 +28,8 @@ dev = [
 ]
 # Install these in a separate venv to avoid JAX version conflicts with modern numpy
 ygoagent = [
-    "jax<=0.4.28",
-    "jaxlib<=0.4.28",
+    "jax==0.4.28",
+    "jaxlib==0.4.28",
     "flax",
     "distrax",
     "chex",

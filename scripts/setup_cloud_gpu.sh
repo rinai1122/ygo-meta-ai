@@ -12,10 +12,13 @@ echo "=== Creating Python venv at $VENV ==="
 python3 -m venv "$VENV"
 source "$VENV/bin/activate"
 
-echo "=== Installing JAX with CUDA support ==="
+echo "=== Installing Python deps ==="
 pip install -U pip
-pip install -U "jax[cuda12]<=0.4.28"
+# Install flax/distrax/chex first — they may pull a newer jax transitively.
+# Then force-install the exact jax+cuda versions we need so the CUDA plugin
+# version matches jaxlib exactly (version mismatch causes segfaults).
 pip install flax distrax chex
+pip install "jax[cuda12]==0.4.28" "jaxlib==0.4.28"
 
 echo "=== Verifying CUDA backend ==="
 python3 -c "import jax; jax.local_devices(); assert jax.default_backend() == 'gpu', 'GPU not detected'; print(f'  JAX backend: {jax.default_backend()}, devices: {jax.local_devices()}')"
