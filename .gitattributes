@@ -1,0 +1,2 @@
+*.flax_model filter=lfs diff=lfs merge=lfs -text
+checkpoints/model_args.json filter=lfs diff=lfs merge=lfs -text

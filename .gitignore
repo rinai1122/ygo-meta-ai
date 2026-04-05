@@ -4,7 +4,6 @@ __pycache__/
 .venv/
 venv/
 .env
-*.flax_model
 *.tflite
 *.so
 *.yrp
@@ -18,8 +17,10 @@ results/payoff_matrices/*_deck_ids.json
 results/nash_solutions/*.json
 results/decks/
 
-# Training checkpoints
-checkpoints/
+# Training checkpoints (LFS-tracked agent checkpoint is kept)
+checkpoints/*
+!checkpoints/agent.flax_model
+!checkpoints/model_args.json
 
 # Build
 dist/

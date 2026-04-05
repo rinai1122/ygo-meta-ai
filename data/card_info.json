@@ -12269,6 +12269,16 @@
     "level": 7,
     "attribute": 4
   },
+  "46985799": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "monster",
+    "atk": 2900,
+    "def": 2300,
+    "level": 9,
+    "attribute": 4
+  },
   "69053263": {
     "in_md": false,
     "ban_ocg": null,
@@ -20557,6 +20567,16 @@
     "atk": 500,
     "def": 1000,
     "level": 1,
+    "attribute": 16
+  },
+  "100295121": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "monster",
+    "atk": 1900,
+    "def": 800,
+    "level": 5,
     "attribute": 16
   },
   "93172951": {
@@ -56979,6 +56999,16 @@
     "level": 6,
     "attribute": 1
   },
+  "101305026": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "monster",
+    "atk": 1200,
+    "def": 1000,
+    "level": 4,
+    "attribute": 16
+  },
   "29618570": {
     "in_md": true,
     "ban_ocg": null,
@@ -70208,6 +70238,16 @@
     "def": 1000,
     "level": 4,
     "attribute": 1
+  },
+  "101305078": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "trap",
+    "atk": null,
+    "def": null,
+    "level": 0,
+    "attribute": 0
   },
   "77637979": {
     "in_md": true,
@@ -90729,6 +90769,16 @@
     "level": 0,
     "attribute": 0
   },
+  "101305077": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "trap",
+    "atk": null,
+    "def": null,
+    "level": 0,
+    "attribute": 0
+  },
   "97173708": {
     "in_md": true,
     "ban_ocg": null,
@@ -97449,6 +97499,16 @@
     "level": 3,
     "attribute": 32
   },
+  "82370493": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": true,
+    "card_type": "monster",
+    "atk": 2200,
+    "def": 1500,
+    "level": 6,
+    "attribute": 32
+  },
   "69946549": {
     "in_md": true,
     "ban_ocg": null,
@@ -102018,6 +102078,16 @@
     "def": null,
     "level": 0,
     "attribute": 0
+  },
+  "101305025": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "monster",
+    "atk": 1000,
+    "def": 1500,
+    "level": 3,
+    "attribute": 16
   },
   "18372968": {
     "in_md": true,
@@ -119858,6 +119928,16 @@
     "def": 2400,
     "level": 7,
     "attribute": 2
+  },
+  "101305064": {
+    "in_md": false,
+    "ban_ocg": null,
+    "is_extra": false,
+    "card_type": "spell",
+    "atk": null,
+    "def": null,
+    "level": 0,
+    "attribute": 0
   },
   "77751766": {
     "in_md": true,

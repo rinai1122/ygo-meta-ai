@@ -233,6 +233,9 @@ def main(
         _write_tokens_ydk(deck_dir)
 
         jax_platform = _detect_jax_platform()
+        # jax.default_backend() returns "gpu" but JAX_PLATFORMS needs "cuda"
+        if jax_platform == "gpu":
+            jax_platform = "cuda"
         mode_label = "small (low-memory)" if small else "full"
         console.print(f"[bold green]YGO RL Training[/bold green]  [{mode_label}]")
         console.print(f"Archetypes : {archetypes}  ({len(decks)} deck variants in pool)")
