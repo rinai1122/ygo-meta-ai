@@ -133,6 +133,9 @@ wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/
 # Play a game (Gemini LLM agent)
 wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.play --deck data/engines/K9Vanquishsoul/engine.ydk --evaluator llm --provider gemini"
 
+# Run meta simulation (pre-trained RL model, default evaluator)
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.simulate --archetypes K9Vanquishsoul --archetypes BrandedDracotail --archetypes RyzealMitsurugi --archetypes SolfachordYummy --staples-dir data/staples/ --episodes 128 --generations 10 --evaluator rl"
+
 # Run meta simulation (random, fast)
 wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.simulate --archetypes K9Vanquishsoul --archetypes BrandedDracotail --archetypes RyzealMitsurugi --archetypes SolfachordYummy --staples-dir data/staples/ --episodes 16 --generations 3 --evaluator random"
 

@@ -56,7 +56,7 @@ SCRIPTS_DIR="$(dirname "$VENDOR")/ygopro-scripts"
 if [ ! -d "$SCRIPTS_DIR" ]; then
     git clone --quiet https://github.com/mycard/ygopro-scripts.git "$SCRIPTS_DIR"
 fi
-cd "$SCRIPTS_DIR" && git checkout --quiet 8e7fde9
+cd "$SCRIPTS_DIR" && git checkout --quiet 8e7fde9bf
 # Relative symlink: vendor/ygo-agent/scripts/script -> ../../ygopro-scripts
 LINK="$VENDOR/scripts/script"
 rm -f "$LINK"

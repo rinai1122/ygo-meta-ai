@@ -129,12 +129,16 @@ class BattleRunner:
                 "--critic-depth", str(self._model_args["critic_depth"]),
             ]
 
-            jax_platform = os.environ.get("JAX_PLATFORMS", "cpu")
+            # Always use CPU for battle subprocesses. With num_envs=1 the game
+            # engine is CPU-bound anyway, and GPU adds massive overhead: each
+            # subprocess must init CUDA, JIT-compile the model, and allocate
+            # device memory.  Multiple subprocesses fighting over one GPU causes
+            # hangs and OOM.
             env = {
                 **os.environ,
                 "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
                 "XLA_PYTHON_CLIENT_ALLOCATOR": "platform",
-                "JAX_PLATFORMS": jax_platform,
+                "JAX_PLATFORMS": "cpu",
             }
             proc = subprocess.Popen(
                 cmd,

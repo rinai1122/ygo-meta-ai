@@ -4,7 +4,15 @@
       "Bash(wsl bash:*)",
       "Bash(\"C:/Users/sungj/Desktop/Sample/ygo-agent/train_out.txt\")",
       "Bash(echo \"exit: $?\")",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Read(//mnt/c/Users/sungj/Desktop/Sample/**)",
+      "Bash(grep -r 27204312 . --include=*.py --include=*.txt --include=*.json -l)",
+      "Bash(grep -r \"card_reader_callback\\\\|Card not found\" vendor/ --include=*.cpp --include=*.h -l)",
+      "Bash(grep -r 27204312 C:/Users/sungj/Desktop/Sample/ygo-agent --include=*.py --include=*.txt --include=*.json -l)",
+      "Bash(grep -r \"card_reader\\\\|token\" C:/Users/sungj/Desktop/Sample/ygo-agent/vendor --include=*.py -l)",
+      "Bash(find C:/Users/sungj/Desktop/Sample/ygo-agent/vendor -name *.cpp -o -name *.h)",
+      "Bash(ls C:/Users/sungj/Desktop/Sample/ygo-agent/vendor/ygo-agent/scripts/script/c2720431*.lua)",
+      "Bash(ls C:/Users/sungj/Desktop/Sample/ygo-agent/vendor/ygo-agent/assets/script/c2720431*.lua)"
     ],
     "defaultMode": "bypassPermissions"
   }
