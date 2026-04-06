@@ -113,6 +113,14 @@ def _write_tokens_ydk(deck_dir: Path) -> None:
         "SELECT id FROM datas WHERE (type & ?) != 0", (TYPE_TOKEN,)
     ).fetchall()]
     con.close()
+    # Filter to tokens present in the code_list — unknown IDs crash init_ygopro.
+    known_codes: set[int] = set()
+    with open(_CODE_LIST) as clf:
+        for line in clf:
+            parts = line.strip().split()
+            if parts:
+                known_codes.add(int(parts[0]))
+    token_ids = [t for t in token_ids if t in known_codes]
     tokens_ydk = deck_dir / "_tokens.ydk"
     with open(tokens_ydk, "w") as f:
         f.write("#main\n")
@@ -232,6 +240,11 @@ def main(
         # from cards_data_ at runtime → [card_reader_callback] Card not found crash.
         _write_tokens_ydk(deck_dir)
 
+        # Count entries in code_list so the embedding table is large enough.
+        # Default n_embed=999 causes NaN for any card with index >= 1000.
+        with open(_CODE_LIST) as _cl:
+            num_embeddings = sum(1 for line in _cl if line.strip())
+
         jax_platform = _detect_jax_platform()
         # jax.default_backend() returns "gpu" but JAX_PLATFORMS needs "cuda"
         if jax_platform == "gpu":
@@ -241,6 +254,7 @@ def main(
         console.print(f"Archetypes : {archetypes}  ({len(decks)} deck variants in pool)")
         console.print(f"Steps      : {timesteps:,}  |  Envs: {num_envs}  |  Minibatches: {num_minibatches}")
         console.print(f"Model      : ch={model['num_channels']} rnn={model['rnn_channels']} layers={model['num_layers']}")
+        console.print(f"Embeddings : {num_embeddings} (from code_list)")
         console.print(f"JAX backend: {jax_platform}")
         console.print(f"Ckpt dir   : {abs_ckpt_dir}\n")
 
@@ -300,6 +314,7 @@ def main(
             "--tb_dir", "None" if small else str(abs_ckpt_dir / "tb"),
             "--local_eval_episodes", str(local_eval_episodes),
             "--timeout", "3600",
+            "--num_embeddings", str(num_embeddings),
             f"--m1.num-layers", str(model["num_layers"]),
             f"--m1.num-channels", str(model["num_channels"]),
             f"--m1.rnn-channels", str(model["rnn_channels"]),
@@ -339,7 +354,7 @@ def main(
         shutil.copy2(latest, dest)
         # Save model architecture so BattleRunner can load the right shape
         args_path = abs_ckpt_dir / "model_args.json"
-        args_path.write_text(json.dumps(model))
+        args_path.write_text(json.dumps({**model, "num_embeddings": num_embeddings}))
         console.print(f"\n[bold green]Training complete. Checkpoint: {dest}[/bold green]")
         console.print(f"Model args : {args_path}")
         console.print("Run simulation: ygo-simulate --evaluator rl --archetypes ...")
