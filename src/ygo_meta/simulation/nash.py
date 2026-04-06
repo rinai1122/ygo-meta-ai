@@ -82,8 +82,9 @@ def solve_nash(matrix: np.ndarray) -> NashSolution:
 
     n = matrix.shape[0]
 
-    # Small matrices: try nashpy first
-    if n <= 30:
+    # Small matrices: try nashpy first.
+    # support_enumeration is O(2^n) per player — only feasible for tiny matrices.
+    if n <= 10:
         try:
             import nashpy as nash
 

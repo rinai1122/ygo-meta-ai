@@ -356,6 +356,16 @@ def main() -> None:
             "SELECT id FROM datas WHERE (type & ?) != 0", (TYPE_TOKEN,)
         ).fetchall()]
         _con.close()
+        # Filter tokens to only those present in code_list.txt — the RL model
+        # only knows cards in the code list, and unknown IDs crash init_ygopro.
+        _cl_path = Path(args.code_list)
+        _known_codes: set[int] = set()
+        with open(_cl_path) as _clf:
+            for _cl_line in _clf:
+                _parts = _cl_line.strip().split()
+                if _parts:
+                    _known_codes.add(int(_parts[0]))
+        _token_ids = [t for t in _token_ids if t in _known_codes]
         _tokens_ydk = Path(_tmp_deck_dir) / "_tokens.ydk"
         with open(_tokens_ydk, "w") as _f:
             _f.write("#main\n")

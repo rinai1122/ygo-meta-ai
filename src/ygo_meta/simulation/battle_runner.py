@@ -34,8 +34,33 @@ _DEFAULT_MODEL_ARGS = _PROJECT_ROOT / "checkpoints" / "model_args.json"
 _FULL_MODEL = dict(num_layers=2, num_channels=128, rnn_channels=512, critic_width=128, critic_depth=3)
 _VENDOR_CODE_LIST = _PROJECT_ROOT / "vendor" / "ygo-agent" / "scripts" / "code_list.txt"
 _CUSTOM_CODE_LIST = _PROJECT_ROOT / "data" / "code_list.txt"
-_CODE_LIST = _CUSTOM_CODE_LIST if _CUSTOM_CODE_LIST.exists() else _VENDOR_CODE_LIST
+_CDB_PATH = _PROJECT_ROOT / "vendor" / "ygo-agent" / "assets" / "locale" / "en" / "cards.cdb"
 _CARD_NAMES = _PROJECT_ROOT / "data" / "card_names.json"
+
+
+def _ensure_code_list() -> Path:
+    """Return path to an up-to-date code_list.txt, regenerating if the CDB is newer."""
+    if _CDB_PATH.exists():
+        need_regen = (
+            not _CUSTOM_CODE_LIST.exists()
+            or _CDB_PATH.stat().st_mtime > _CUSTOM_CODE_LIST.stat().st_mtime
+        )
+        if need_regen:
+            import sqlite3
+            con = sqlite3.connect(str(_CDB_PATH))
+            ids = [r[0] for r in con.execute("SELECT id FROM datas ORDER BY id").fetchall()]
+            con.close()
+            _CUSTOM_CODE_LIST.parent.mkdir(parents=True, exist_ok=True)
+            with open(_CUSTOM_CODE_LIST, "w", encoding="ascii") as f:
+                for card_id in ids:
+                    f.write(f"{card_id} 1\n")
+            print(f"[battle_runner] Regenerated {_CUSTOM_CODE_LIST} ({len(ids)} cards from CDB)", flush=True)
+    if _CUSTOM_CODE_LIST.exists():
+        return _CUSTOM_CODE_LIST
+    return _VENDOR_CODE_LIST
+
+
+_CODE_LIST = _ensure_code_list()
 
 
 def _win_to_wsl(path: str) -> str:
