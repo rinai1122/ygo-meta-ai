@@ -288,7 +288,7 @@ def format_obs_prompt(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="YGO game runner for LLM agent testing")
-    parser.add_argument("--deck", required=True, help="Deck directory or single YDK file path")
+    parser.add_argument("--deck", default=None, help="Deck directory or single YDK file path")
     parser.add_argument("--deck1", default=None, help="Deck1 name (default: deck stem or 'random')")
     parser.add_argument("--deck2", default=None, help="Deck2 name (default: same as deck1)")
     parser.add_argument("--num-episodes", type=int, default=1)
@@ -304,7 +304,16 @@ def main() -> None:
     parser.add_argument("--rnn-channels", type=int, default=512, help="Model rnn_channels (must match checkpoint)")
     parser.add_argument("--critic-width", type=int, default=128, help="Model critic_width (must match checkpoint)")
     parser.add_argument("--critic-depth", type=int, default=3, help="Model critic_depth (must match checkpoint)")
+    parser.add_argument("--batch-file", default=None, help="JSON file with list of matchups (batch mode, init JAX once)")
     args = parser.parse_args()
+
+    if args.batch_file:
+        if not args.deck:
+            parser.error("--deck is required with --batch-file (shared deck directory)")
+        _main_batch(args)
+        return
+    if not args.deck:
+        parser.error("--deck is required (unless using --batch-file)")
 
     # code_list.txt has lines like "2511 1" (code + flag) but init_code_list
     # expects one integer per line.  The C++ engine uses ALL entries (flag=0 and
@@ -506,6 +515,291 @@ def main() -> None:
                 rl_rstate = rl_agent.init_rnn_state(1)  # reset RNN state for next episode
 
     envs.close()
+
+
+def _compute_token_ids(cdb_path: str, code_list_path: str) -> list[int]:
+    """Return token card IDs from CDB, filtered to those in code_list."""
+    cdb = Path(cdb_path)
+    if not cdb.exists():
+        return []
+    import sqlite3
+    con = sqlite3.connect(str(cdb))
+    token_ids = [r[0] for r in con.execute(
+        "SELECT id FROM datas WHERE (type & ?) != 0", (0x4000,)
+    ).fetchall()]
+    con.close()
+    known: set[int] = set()
+    with open(code_list_path) as f:
+        for line in f:
+            parts = line.strip().split()
+            if parts:
+                known.add(int(parts[0]))
+    return [t for t in token_ids if t in known]
+
+
+def _setup_deck_dir(deck_path: str, token_ids: list[int]) -> str:
+    """Copy decks to temp dir with LF line endings and write _tokens.ydk.
+
+    Returns the path to pass to init_ygopro.
+    """
+    import tempfile as _tf
+    tmp = _tf.mkdtemp()
+    src = Path(deck_path)
+    if src.is_dir():
+        for ydk in src.glob("*.ydk"):
+            (Path(tmp) / ydk.name).write_bytes(ydk.read_bytes().replace(b"\r\n", b"\n"))
+        deck_arg = tmp
+    else:
+        copy = Path(tmp) / src.name
+        copy.write_bytes(src.read_bytes().replace(b"\r\n", b"\n"))
+        deck_arg = str(copy)
+    if token_ids:
+        with open(Path(tmp) / "_tokens.ydk", "w") as f:
+            f.write("#main\n")
+            for tid in token_ids:
+                f.write(f"{tid}\n")
+            f.write("#extra\n#side\n")
+    return deck_arg
+
+
+def _init_rl_model(args, obs_space):
+    """Load RL agent + checkpoint + JIT compile.  Returns (agent, params, get_probs_fn)."""
+    import jax
+    import jax.numpy as jnp
+    import flax
+    from functools import partial
+    from ygoai.rl.jax.agent import RNNAgent
+
+    sample_obs = jax.tree.map(lambda x: jnp.array([x]), obs_space.sample())
+    agent = RNNAgent(
+        embedding_shape=args.num_embeddings,
+        num_layers=args.num_layers,
+        num_channels=args.num_channels,
+        rnn_channels=args.rnn_channels,
+        critic_width=args.critic_width,
+        critic_depth=args.critic_depth,
+    )
+    key = jax.random.PRNGKey(args.seed)
+    rstate = agent.init_rnn_state(1)
+    params = jax.jit(agent.init)(key, sample_obs, rstate)
+    with open(args.checkpoint, "rb") as f:
+        params = flax.serialization.from_bytes(params, f.read())
+    params = jax.device_put(params)
+
+    @partial(jax.jit)
+    def get_probs(params, rstate, obs):
+        next_rstate, logits = agent.apply(params, obs, rstate)[:2]
+        return next_rstate, jax.nn.softmax(logits, axis=-1)
+
+    return agent, params, get_probs
+
+
+def _main_batch(args) -> None:
+    """Batch mode: process multiple matchups with a single JAX/RL initialisation.
+
+    ``--deck`` points to a flat directory containing ALL matchup decks (e.g.
+    ``m0_deck1.ydk``, ``m0_deck2.ydk``, …).  ``init_ygopro`` is called **once**
+    with that directory; each matchup just creates a new ``ygoenv`` with the
+    appropriate deck-name pair.
+    """
+    import tempfile as _tf
+    import time as _time
+
+    def _log(msg: str) -> None:
+        sys.stderr.write(f"[batch] {msg}\n")
+        sys.stderr.flush()
+
+    _log("starting — init code_list …")
+
+    # --- One-time: code_list ---
+    with open(args.code_list, "r") as f:
+        codes_only = "\n".join(
+            parts[0] for line in f for parts in (line.split(),) if parts
+        )
+    tmp_cl = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+    tmp_cl.write(codes_only)
+    tmp_cl.close()
+    from ygoinf.features import init_code_list, code_to_id
+    init_code_list(tmp_cl.name)
+    id_to_code = {v: k for k, v in code_to_id.items()}
+
+    # --- One-time: card names ---
+    with open(args.card_names, "r", encoding="utf-8") as f:
+        card_names = json.load(f)
+
+    # --- One-time: token IDs + deck dir setup ---
+    vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "ygo-agent"
+    cdb = vendor_root / "assets" / "locale" / "en" / "cards.cdb"
+    token_ids = _compute_token_ids(str(cdb), args.code_list)
+
+    # --- One-time: CWD for Lua scripts ---
+    vendor_scripts = vendor_root / "scripts"
+    if vendor_scripts.is_dir():
+        os.chdir(str(vendor_scripts))
+
+    # --- One-time: prepare shared deck directory (LF endings + tokens) ---
+    deck_arg = _setup_deck_dir(args.deck, token_ids)
+    _log(f"deck dir ready: {deck_arg}")
+
+    # --- One-time: init_ygopro (registers all decks in C++ module) ---
+    # Multiple batch workers may hit the same cards.cdb concurrently.
+    # The C++ init_module locks the database briefly; retry on contention.
+    import time as _time
+    from ygoai.utils import init_ygopro
+    for _attempt in range(10):
+        try:
+            init_ygopro(args.env_id, "english", deck_arg, args.code_list,
+                        preload_tokens=bool(token_ids))
+            break
+        except RuntimeError as _e:
+            if "database is locked" in str(_e) and _attempt < 9:
+                wait = 1.0 + _attempt * 0.5
+                _log(f"CDB locked, retry {_attempt + 1}/10 in {wait:.1f}s …")
+                _time.sleep(wait)
+            else:
+                raise
+    _log("init_ygopro done")
+
+    # --- Read batch manifest ---
+    with open(args.batch_file, "r") as f:
+        matchups = json.load(f)
+    n_matchups = len(matchups)
+    _log(f"loaded {n_matchups} matchups")
+
+    import ygoenv
+    from ygoai.rl.env import RecordEpisodeStatistics
+
+    rl_agent = None
+    rl_params = None
+    get_rl_probs = None
+
+    # Duel transcripts: first N episodes per matchup, plain text under results/duel_logs/.
+    project_root = Path(__file__).resolve().parent.parent
+    duel_log_dir = project_root / "results" / "duel_logs"
+    duel_log_dir.mkdir(parents=True, exist_ok=True)
+    LOG_EPISODES_PER_MATCHUP = 2
+
+    def _safe(name: str) -> str:
+        return "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+
+    for midx, mu in enumerate(matchups):
+        t0 = _time.time()
+        _log(f"matchup {midx + 1}/{n_matchups}: {mu['deck1']} vs {mu['deck2']}")
+
+        _random.seed(mu["seed"])
+        np.random.seed(mu["seed"])
+        env_seed = _random.randint(0, int(1e8))
+
+        envs = ygoenv.make(
+            task_id=args.env_id, env_type="gymnasium",
+            num_envs=1, num_threads=1, seed=env_seed,
+            deck1=mu["deck1"], deck2=mu["deck2"], player=-1,
+            max_options=24, n_history_actions=32,
+            play_mode="self", async_reset=False, verbose=False,
+        )
+        envs.num_envs = 1
+
+        # First matchup: init RL model (needs obs_space from a live env)
+        if rl_agent is None and args.checkpoint:
+            _log("loading RL model + JIT compile (one-time) …")
+            rl_agent, rl_params, get_rl_probs = _init_rl_model(args, envs.observation_space)
+            _log("RL model ready")
+
+        envs = RecordEpisodeStatistics(envs)
+        obs, infos = envs.reset()
+        rl_rstate = rl_agent.init_rnn_state(1) if rl_agent else None
+        ep_idx = 0
+
+        # Per-episode log buffer (only first LOG_EPISODES_PER_MATCHUP episodes).
+        d1_id = mu.get("deck1_id", mu["deck1"])
+        d2_id = mu.get("deck2_id", mu["deck2"])
+        log_buf: list[str] = []
+        log_step = 0
+
+        while ep_idx < mu["num_episodes"]:
+            to_play = int(infos["to_play"][0])
+            num_options = max(1, int(infos["num_options"][0]))
+
+            log_this = ep_idx < LOG_EPISODES_PER_MATCHUP
+            if log_this:
+                prompt_text = format_obs_prompt(
+                    obs["global_"][0], obs["cards_"][0], obs["actions_"][0],
+                    num_options, id_to_code, card_names,
+                )
+
+            if rl_agent is not None and to_play != args.llm_player:
+                obs_rl = {k: (v if k != 'mask_' else None) for k, v in obs.items()}
+                rl_rstate, probs = get_rl_probs(rl_params, rl_rstate, obs_rl)
+                action = int(np.array(probs).argmax(axis=1)[0])
+                action = min(action, num_options - 1)
+            else:
+                prompt = format_obs_prompt(
+                    obs["global_"][0], obs["cards_"][0], obs["actions_"][0],
+                    num_options, id_to_code, card_names,
+                )
+                sys.stdout.write(json.dumps({
+                    "type": "step", "matchup_idx": midx,
+                    "to_play": to_play, "num_options": num_options,
+                    "prompt": prompt,
+                }) + "\n")
+                sys.stdout.flush()
+                line = sys.stdin.readline()
+                if not line:
+                    break
+                action = max(0, min(int(json.loads(line.strip())["action"]), num_options - 1))
+
+            if log_this:
+                action_desc = _describe_action(
+                    obs["actions_"][0][action],
+                    [_decode_card(obs["cards_"][0][i], id_to_code, card_names)
+                     for i in range(obs["cards_"][0].shape[0])],
+                    id_to_code, card_names,
+                )
+                seat_label = f"P{to_play} ({d1_id if to_play == 0 else d2_id})"
+                log_step += 1
+                log_buf.append(
+                    f"--- step {log_step} | {seat_label} ---\n"
+                    f"{prompt_text}\n"
+                    f">>> CHOSEN [{action}] {action_desc}\n"
+                )
+
+            prev_to_play = to_play
+            obs, rewards, dones, infos = envs.step(np.array([action]))
+
+            if dones[0]:
+                reward = float(rewards[0])
+                winner = prev_to_play if reward > 0 else (1 - prev_to_play)
+                sys.stdout.write(json.dumps({
+                    "type": "done", "matchup_idx": midx,
+                    "ep_idx": ep_idx, "reward": reward,
+                    "winner": winner, "turns": int(infos["l"][0]),
+                }) + "\n")
+                sys.stdout.flush()
+                if ep_idx < LOG_EPISODES_PER_MATCHUP:
+                    winner_id = d1_id if winner == 0 else d2_id
+                    fname = f"m{midx:03d}_{_safe(d1_id)}_vs_{_safe(d2_id)}_ep{ep_idx}.txt"
+                    header = (
+                        f"Matchup {midx}: {d1_id} (P0) vs {d2_id} (P1)\n"
+                        f"Episode {ep_idx} | seed {mu['seed']} | "
+                        f"winner: P{winner} ({winner_id}) | turns: {int(infos['l'][0])}\n"
+                        + "=" * 72 + "\n\n"
+                    )
+                    (duel_log_dir / fname).write_text(
+                        header + "\n".join(log_buf), encoding="utf-8"
+                    )
+                    log_buf = []
+                    log_step = 0
+                ep_idx += 1
+                if rl_agent is not None:
+                    rl_rstate = rl_agent.init_rnn_state(1)
+
+        envs.close()
+        elapsed = _time.time() - t0
+        _log(f"matchup {midx + 1}/{n_matchups} done ({elapsed:.1f}s)")
+
+    sys.stdout.write(json.dumps({"type": "all_done"}) + "\n")
+    sys.stdout.flush()
+    _log("all matchups complete")
 
 
 if __name__ == "__main__":

@@ -259,6 +259,8 @@ class BattleRunner:
                 manifest.append({
                     "deck1": d1_name,
                     "deck2": d2_name,
+                    "deck1_id": d1.variant_id,
+                    "deck2_id": d2.variant_id,
                     "num_episodes": n_ep,
                     "seed": seed,
                 })
