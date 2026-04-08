@@ -53,20 +53,33 @@ def _parse_tech_spec(spec: str) -> tuple[int, str]:
     return int(spec), spec
 
 
-def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
-    """Build a deck variant by replacing the LAST main-deck card with `code`.
+def _make_baseline(input_deck: Deck) -> Deck:
+    """Strip the last main-deck slot — that's the flex slot under test.
 
-    Convention: the last slot of the baseline main is the flex slot under test.
-    Keeps total deck size constant.
+    The baseline has *no* tech card. Each tech variant adds its candidate
+    back into that slot, so deltas measure 'this card vs nothing'.
     """
-    new_main = list(baseline.main)
-    if not new_main:
-        raise ValueError("baseline deck has empty main")
-    new_main[-1] = code
+    if not input_deck.main:
+        raise ValueError("input deck has empty main")
+    return Deck(
+        archetype=input_deck.archetype,
+        variant_id=f"{input_deck.variant_id}_baseline",
+        main=list(input_deck.main[:-1]),
+        extra=list(input_deck.extra),
+        side=list(input_deck.side),
+    )
+
+
+def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
+    """Build a tech variant by APPENDING `code` to the baseline.
+
+    Baseline already has the flex slot stripped, so appending puts the
+    candidate exactly in that slot.
+    """
     variant = Deck(
         archetype=baseline.archetype,
         variant_id=f"{baseline.variant_id}+{name.replace(' ', '_')}",
-        main=new_main,
+        main=list(baseline.main) + [code],
         extra=list(baseline.extra),
         side=list(baseline.side),
     )
@@ -88,9 +101,10 @@ def main(
     banlist_version: str = typer.Option("unknown"),
 ) -> None:
     """Enqueue tech-card delta queries and block until a human resolves them."""
-    base_deck = parse_ydk(baseline)
+    input_deck = parse_ydk(baseline)
     opp_deck = parse_ydk(opponent)
 
+    base_deck = _make_baseline(input_deck)
     tech_variants = [
         _make_tech_variant(base_deck, *_parse_tech_spec(spec)) for spec in tech
     ]

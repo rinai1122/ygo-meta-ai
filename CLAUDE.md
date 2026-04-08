@@ -164,9 +164,11 @@ enough for monthly cadence and detects ~5% true edges at ~1.5σ, the right
 resolution for *ranking* tech cards (not certifying any single one).
 
 **How it works.**
-- `ygo-eval-tech-delta` parses the baseline + opponent YDKs, builds K tech-card
-  variants by replacing the LAST main-deck slot (the "flex slot under test")
-  with each candidate, and enqueues `n_baseline + K·n_tech` queries.
+- `ygo-eval-tech-delta` parses the input + opponent YDKs. The **baseline** is
+  the input deck with its LAST main-deck slot stripped (that's the flex slot
+  under test, so the baseline contains *no* tech card). Each tech variant
+  appends one candidate back into that slot. The CLI then enqueues
+  `n_baseline + K·n_tech` queries.
 - Every query is sampled with a fresh hand. Tech-card queries pin the candidate
   card into A's hand via `force_a_in_hand`, so the human is judging *the card
   in play*, not the chance of drawing it.
