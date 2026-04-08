@@ -142,9 +142,41 @@ wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/
 # Run meta simulation (Gemini LLM)
 wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && python -m ygo_meta.cli.simulate --archetypes K9Vanquishsoul --archetypes BrandedDracotail --archetypes RyzealMitsurugi --archetypes SolfachordYummy --staples-dir data/staples/ --episodes 16 --generations 3 --evaluator llm --provider gemini"
 
+# Tech-card delta evaluation (human-in-the-loop, ~once per banlist)
+# Terminal 1: launch the web UI
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && ygo-eval-server --store-dir results/judgments"
+# Terminal 2: enqueue baseline + tech queries and block until you finish judging in the browser
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && ygo-eval-tech-delta --baseline data/engines/K9Vanquishsoul/baseline.ydk --opponent data/engines/BrandedDracotail/baseline.ydk --tech 23434538:Maxx_C --tech 14558127:Ash_Blossom --n-baseline 36 --n-tech 12"
+
 # Tests
 wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && pytest tests/ -v"
 ```
+
+### Tech-card delta workflow (human-in-the-loop)
+
+**Cadence:** run once per banlist (~monthly), so the human-effort budget can be relatively large.
+
+**Statistical model.** Δ̂ = p̂_tech − p̂_base. The baseline is shared across K
+tech candidates, so its variance contaminates every delta. Optimal allocation
+is `n_base / n_tech ≈ √K`. **Defaults: `n_baseline=36`, `n_tech=12`** (3:1,
+suited for K≈10). Per archetype: `36 + 12·K` ≈ 180 hands for K=12 — fast
+enough for monthly cadence and detects ~5% true edges at ~1.5σ, the right
+resolution for *ranking* tech cards (not certifying any single one).
+
+**How it works.**
+- `ygo-eval-tech-delta` parses the baseline + opponent YDKs, builds K tech-card
+  variants by replacing the LAST main-deck slot (the "flex slot under test")
+  with each candidate, and enqueues `n_baseline + K·n_tech` queries.
+- Every query is sampled with a fresh hand. Tech-card queries pin the candidate
+  card into A's hand via `force_a_in_hand`, so the human is judging *the card
+  in play*, not the chance of drawing it.
+- In the web UI, the **"+ reveal next draw"** button shows additional cards
+  from the deck — useful for evaluating draw cards like Maxx C and the
+  Mulcharmies. Reveals are deterministic per query.
+- The CLI blocks until every required judgment is in, then prints a ranked
+  delta table and saves JSON to `results/tech_deltas/`.
+
+See `src/ygo_meta/evaluator/delta.py` for the math and `cli/tech_delta.py` for the entry point.
 
 ---
 

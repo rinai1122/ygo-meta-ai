@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>YGO Human Evaluator</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background: #181a1f; color: #eee; margin: 0; padding: 16px; }
+  h1 { margin: 0 0 8px 0; font-size: 18px; }
+  .stats { color: #aaa; margin-bottom: 12px; font-size: 13px; }
+  .turn { font-size: 20px; font-weight: 700; padding: 10px 14px; background: #2a2d36; border-left: 4px solid #f5b942; margin-bottom: 14px; }
+  .matchup { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .side { background: #22252d; padding: 10px; border-radius: 6px; }
+  .side h2 { margin: 0 0 6px 0; font-size: 15px; }
+  .side .archetype { font-size: 12px; color: #8fd; margin-bottom: 8px; }
+  .hand { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .card { width: 88px; font-size: 10px; text-align: center; }
+  .card img { width: 88px; height: 128px; object-fit: cover; border-radius: 4px; background: #111; }
+  .card .name { margin-top: 3px; color: #ccc; line-height: 1.1; word-wrap: break-word; }
+  .deck-list { max-height: 120px; overflow-y: auto; font-size: 11px; color: #888; margin-top: 6px; border-top: 1px solid #333; padding-top: 6px; }
+  .buckets { margin-top: 16px; display: flex; gap: 8px; justify-content: center; }
+  .bucket { flex: 1; padding: 16px; font-size: 15px; font-weight: 600; border: 2px solid #444; background: #2a2d36; color: #eee; cursor: pointer; border-radius: 6px; }
+  .bucket:hover { border-color: #f5b942; }
+  .bucket .key { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
+  .empty { text-align: center; padding: 60px; color: #888; }
+  .note { margin-top: 10px; }
+  .note input { width: 100%; padding: 6px; background: #2a2d36; color: #eee; border: 1px solid #444; border-radius: 4px; }
+  .draw-btn { margin-top: 6px; padding: 4px 8px; font-size: 11px; background: #2a2d36; color: #ccc; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+  .draw-btn:hover { border-color: #f5b942; color: #f5b942; }
+  .next-draws { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .next-draws .card { opacity: 0.85; }
+  .next-draws .card img { border: 1px dashed #555; }
+</style>
+</head>
+<body>
+<h1>YGO Human Evaluator</h1>
+<div class="stats" id="stats">loading…</div>
+<div id="query"></div>
+<script>
+let current = null;
+
+async function loadStats() {
+  const r = await fetch('/api/stats');
+  const s = await r.json();
+  document.getElementById('stats').textContent =
+    `pending: ${s.pending} · answered: ${s.answered} · banlist: ${s.banlist_version}`;
+}
+
+async function loadNext() {
+  await loadStats();
+  const r = await fetch('/api/queue');
+  const queue = await r.json();
+  if (queue.length === 0) {
+    document.getElementById('query').innerHTML =
+      '<div class="empty">Queue empty. Waiting for the simulator to emit new queries…</div>';
+    current = null;
+    setTimeout(loadNext, 2000);
+    return;
+  }
+  const next = queue[0];
+  const q = await (await fetch('/api/query/' + next.query_id)).json();
+  current = q;
+  drawCounts.A = 0;
+  drawCounts.B = 0;
+  render(q);
+}
+
+function cardHtml(c) {
+  return `<div class="card">
+    <img src="${c.image}" alt="${c.name}" onerror="this.style.visibility='hidden'"/>
+    <div class="name">${c.name}</div>
+  </div>`;
+}
+
+function deckListHtml(cards) {
+  const counts = {};
+  for (const c of cards) counts[c.name] = (counts[c.name] || 0) + 1;
+  return Object.entries(counts)
+    .sort((a,b) => b[1]-a[1])
+    .map(([n,c]) => `${c}× ${n}`)
+    .join('<br/>');
+}
+
+function render(q) {
+  const turn = q.who_first === 'A'
+    ? `${q.deck_a_archetype} (A) goes FIRST`
+    : `${q.deck_b_archetype} (B) goes FIRST`;
+  const html = `
+    <div class="turn">${turn}</div>
+    <div class="matchup">
+      <div class="side">
+        <h2>Player A — ${q.deck_a_id}</h2>
+        <div class="archetype">${q.deck_a_archetype}</div>
+        <div class="hand">${q.hand_a.map(cardHtml).join('')}</div>
+        <button class="draw-btn" data-side="A">+ reveal next draw</button>
+        <div class="next-draws" id="draws-A"></div>
+        <details><summary>deck list</summary><div class="deck-list">${deckListHtml(q.deck_a_main)}</div></details>
+      </div>
+      <div class="side">
+        <h2>Player B — ${q.deck_b_id}</h2>
+        <div class="archetype">${q.deck_b_archetype}</div>
+        <div class="hand">${q.hand_b.map(cardHtml).join('')}</div>
+        <button class="draw-btn" data-side="B">+ reveal next draw</button>
+        <div class="next-draws" id="draws-B"></div>
+        <details><summary>deck list</summary><div class="deck-list">${deckListHtml(q.deck_b_main)}</div></details>
+      </div>
+    </div>
+    <div class="buckets">
+      <button class="bucket" data-b="1"><span class="key">1</span>A clear win (A 100%)</button>
+      <button class="bucket" data-b="0.75"><span class="key">2</span>A favored (A 75%)</button>
+      <button class="bucket" data-b="0.5"><span class="key">3</span>coinflip (A 50%)</button>
+      <button class="bucket" data-b="0.25"><span class="key">4</span>B favored (A 25%)</button>
+      <button class="bucket" data-b="0"><span class="key">5</span>B clear win (A 0%)</button>
+    </div>
+    <div class="note"><input id="note" placeholder="optional note" /></div>
+  `;
+  document.getElementById('query').innerHTML = html;
+  for (const btn of document.querySelectorAll('.bucket')) {
+    btn.addEventListener('click', () => submit(parseFloat(btn.dataset.b)));
+  }
+  for (const btn of document.querySelectorAll('.draw-btn')) {
+    btn.addEventListener('click', () => revealNext(btn.dataset.side));
+  }
+}
+
+const drawCounts = {A: 0, B: 0};
+
+async function revealNext(side) {
+  if (!current) return;
+  drawCounts[side] += 1;
+  const r = await fetch(`/api/query/${current.query_id}/draw?side=${side}&n=${drawCounts[side]}`);
+  if (!r.ok) { alert('reveal failed: ' + r.status); return; }
+  const data = await r.json();
+  document.getElementById('draws-' + side).innerHTML = data.cards.map(cardHtml).join('');
+}
+
+async function submit(bucket) {
+  if (!current) return;
+  const note = document.getElementById('note')?.value || '';
+  const r = await fetch('/api/query/' + current.query_id, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({bucket, note}),
+  });
+  if (!r.ok) { alert('submit failed: ' + r.status); return; }
+  loadNext();
+}
+
+document.addEventListener('keydown', (e) => {
+  const map = {'1': 1, '2': 0.75, '3': 0.5, '4': 0.25, '5': 0};
+  if (e.key in map && current) submit(map[e.key]);
+});
+
+loadNext();
+</script>
+</body>
+</html>

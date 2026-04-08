@@ -17,6 +17,8 @@ dependencies = [
     "rich>=13.7.0",
     "anyio>=4.4.0",
     "python-dotenv>=1.0.0",
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +43,8 @@ ygoagent = [
 ygo-play = "ygo_meta.cli.play:main"
 ygo-simulate = "ygo_meta.cli.simulate:main"
 ygo-train = "ygo_meta.cli.train:app"
+ygo-eval-server = "ygo_meta.evaluator.web.server:cli"
+ygo-eval-tech-delta = "ygo_meta.cli.tech_delta:app"
 
 [build-system]
 requires = ["hatchling"]
