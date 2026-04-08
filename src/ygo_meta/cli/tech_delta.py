@@ -101,8 +101,9 @@ def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
 
 @app.command()
 def main(
-    baseline: Path = typer.Option(..., help="YDK file: baseline deck (last main slot is the flex slot)"),
-    opponent: Path = typer.Option(..., help="YDK file: opponent deck"),
+    baseline: str = typer.Option(..., help="Archetype name (e.g. K9Vanquishsoul) — resolves to <engines-dir>/<name>/baseline.ydk. A direct path also works."),
+    opponent: str = typer.Option(..., help="Archetype name (e.g. BrandedDracotail) — resolves to <engines-dir>/<name>/baseline.ydk. A direct path also works."),
+    engines_dir: Path = typer.Option(Path("data/engines"), help="Where to look up archetype baseline.ydk files"),
     tech_pool: Path = typer.Option(
         Path("data/staples/main_staple.yaml"),
         help="YAML staples file: every card in here is evaluated as a tech candidate",
@@ -121,8 +122,20 @@ def main(
     banlist_version: str = typer.Option("unknown"),
 ) -> None:
     """Enqueue tech-card delta queries and block until a human resolves them."""
-    base_deck = parse_ydk(baseline)
-    opp_deck = parse_ydk(opponent)
+    def _resolve(name: str) -> Path:
+        p = Path(name)
+        if p.suffix == ".ydk" and p.exists():
+            return p
+        candidate = engines_dir / name / "baseline.ydk"
+        if not candidate.exists():
+            console.print(f"[red]Could not find baseline for '{name}': {candidate} missing[/red]")
+            raise typer.Exit(1)
+        return candidate
+
+    baseline_path = _resolve(baseline)
+    opponent_path = _resolve(opponent)
+    base_deck = parse_ydk(baseline_path)
+    opp_deck = parse_ydk(opponent_path)
 
     if tech:
         tech_specs = [_parse_tech_spec(spec) for spec in tech]
@@ -151,8 +164,8 @@ def main(
     )
 
     console.print(f"[bold green]Tech-delta evaluation[/bold green]")
-    console.print(f"  baseline: {baseline}")
-    console.print(f"  opponent: {opponent}")
+    console.print(f"  baseline: {baseline} ({baseline_path})")
+    console.print(f"  opponent: {opponent} ({opponent_path})")
     console.print(f"  K={K} tech cards, n_baseline={n_baseline}, n_tech={n_tech}")
     console.print(f"  total queries: {total} (newly added: {added})")
     console.print(
@@ -204,10 +217,12 @@ def main(
     console.print(table)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{baseline.stem}_vs_{opponent.stem}.json"
+    out_path = out_dir / f"{baseline_path.stem}_vs_{opponent_path.stem}.json"
     out_path.write_text(json.dumps({
-        "baseline_ydk": str(baseline),
-        "opponent_ydk": str(opponent),
+        "baseline": baseline,
+        "opponent": opponent,
+        "baseline_ydk": str(baseline_path),
+        "opponent_ydk": str(opponent_path),
         "banlist_version": banlist_version,
         "n_baseline": n_b,
         "baseline_winrate": p_b,

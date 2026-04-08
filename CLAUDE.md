@@ -146,7 +146,7 @@ wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/
 # Terminal 1: launch the web UI
 wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && ygo-eval-server --store-dir results/judgments"
 # Terminal 2: enqueue baseline + tech queries and block until you finish judging in the browser
-wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && ygo-eval-tech-delta --baseline data/engines/K9Vanquishsoul/baseline.ydk --opponent data/engines/BrandedDracotail/baseline.ydk --n-baseline 36 --n-tech 12"
+wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && ygo-eval-tech-delta --baseline K9Vanquishsoul --opponent BrandedDracotail --n-baseline 36 --n-tech 12"
 
 # Tests
 wsl bash -c "source /home/ubuntu/.ygoagent_venv/bin/activate && cd /mnt/c/Users/sungj/Desktop/Sample/ygo-agent && pytest tests/ -v"
