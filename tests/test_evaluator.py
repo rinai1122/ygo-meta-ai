@@ -356,6 +356,28 @@ def test_compute_deltas_math(tmp_path: Path) -> None:
     assert r.se_delta > 0
 
 
+def test_enqueue_phase_flags(tmp_path: Path) -> None:
+    """include_baseline / include_tech let a caller phase the evaluation."""
+    store = JudgmentStore(tmp_path)
+    base = _deck("Arch1", "A_v0", 1000)
+    opp = _deck("Arch2", "B_v0", 2000)
+    techs = [_make_tech_variant(base, 9001, "MaxxC")]
+
+    # Phase 1 only.
+    enqueue_delta_queries(
+        store, base, opp, techs, n_baseline=6, n_tech=4, seed=0,
+        include_baseline=True, include_tech=False,
+    )
+    assert store.pending_count() == 6
+
+    # Phase 2 only.
+    enqueue_delta_queries(
+        store, base, opp, techs, n_baseline=6, n_tech=4, seed=0,
+        include_baseline=False, include_tech=True,
+    )
+    assert store.pending_count() == 6 + 4
+
+
 def test_compute_deltas_skips_unjudged_techs(tmp_path: Path) -> None:
     store = JudgmentStore(tmp_path)
     base = _deck("Arch1", "A_v0", 1000)

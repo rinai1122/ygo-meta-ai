@@ -45,6 +45,7 @@ ygo-simulate = "ygo_meta.cli.simulate:main"
 ygo-train = "ygo_meta.cli.train:app"
 ygo-eval-server = "ygo_meta.evaluator.web.server:cli"
 ygo-eval-tech-delta = "ygo_meta.cli.tech_delta:app"
+ygo-eval-full = "ygo_meta.cli.full_eval:app"
 
 [build-system]
 requires = ["hatchling"]

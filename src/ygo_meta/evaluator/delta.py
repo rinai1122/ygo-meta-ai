@@ -85,42 +85,48 @@ def enqueue_delta_queries(
     n_baseline: int = DEFAULT_N_BASELINE,
     n_tech: int = DEFAULT_N_TECH,
     seed: int = 0,
+    include_baseline: bool = True,
+    include_tech: bool = True,
 ) -> int:
-    """Enqueue (n_baseline + n_tech * len(tech_variants)) pending queries.
+    """Enqueue baseline and/or tech queries for one matchup.
 
     Each query is sampled with a fresh hand. Tech-card queries pin the
     candidate card into A's hand. Returns the number of NEW queries added
     (already-cached judgments are skipped automatically by the store).
+
+    ``include_baseline`` / ``include_tech`` let a caller run a full evaluation
+    in two phases: all baselines first, then all tech-card variants — useful
+    when you want to lock in baseline win-rates before judging deltas.
     """
     added = 0
 
-    # Baseline queries: balanced who_first, no forced cards.
-    base_queries = sample_queries_for_pair(
-        deck_a=baseline,
-        deck_b=opponent,
-        num_queries=n_baseline,
-        seed=seed,
-    )
-    for q in base_queries:
-        before = store.pending_count()
-        store.append_pending(q)
-        if store.pending_count() > before:
-            added += 1
-
-    # Tech-card queries.
-    for k, tv in enumerate(tech_variants):
-        tq = sample_queries_for_pair(
-            deck_a=tv.deck,
+    if include_baseline:
+        base_queries = sample_queries_for_pair(
+            deck_a=baseline,
             deck_b=opponent,
-            num_queries=n_tech,
-            seed=seed + 1000 * (k + 1),
-            force_a_in_hand=[tv.code],
+            num_queries=n_baseline,
+            seed=seed,
         )
-        for q in tq:
+        for q in base_queries:
             before = store.pending_count()
             store.append_pending(q)
             if store.pending_count() > before:
                 added += 1
+
+    if include_tech:
+        for k, tv in enumerate(tech_variants):
+            tq = sample_queries_for_pair(
+                deck_a=tv.deck,
+                deck_b=opponent,
+                num_queries=n_tech,
+                seed=seed + 1000 * (k + 1),
+                force_a_in_hand=[tv.code],
+            )
+            for q in tq:
+                before = store.pending_count()
+                store.append_pending(q)
+                if store.pending_count() > before:
+                    added += 1
 
     return added
 
