@@ -366,6 +366,27 @@ def test_compute_deltas_skips_unjudged_techs(tmp_path: Path) -> None:
     assert results == []
 
 
+def test_load_tech_pool_dedups_and_handles_missing_names(tmp_path: Path) -> None:
+    from ygo_meta.cli.tech_delta import _load_tech_pool
+
+    pool_yaml = tmp_path / "pool.yaml"
+    pool_yaml.write_text(
+        "main_staple:\n"
+        "  - {code: 14558127, name: Ash Blossom, copies_max: 3}\n"
+        "  - {code: 23434538, name: Maxx C, copies_max: 3}\n"
+        "  - {code: 14558127, name: Ash Blossom, copies_max: 3}\n"  # dup
+        "  - {code: 99999999, copies_max: 1}\n"                       # no name
+        ,
+        encoding="utf-8",
+    )
+    out = _load_tech_pool(pool_yaml)
+    codes = [c for c, _ in out]
+    assert codes == [14558127, 23434538, 99999999]
+    names = dict(out)
+    assert names[14558127] == "Ash Blossom"
+    assert names[99999999] == "99999999"
+
+
 def test_default_allocation_ratio_is_three_to_one() -> None:
     """Sanity-check the documented 3:1 baseline:tech default."""
     assert DEFAULT_N_BASELINE == 3 * DEFAULT_N_TECH

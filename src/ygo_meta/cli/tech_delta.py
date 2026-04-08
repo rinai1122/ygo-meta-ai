@@ -26,6 +26,7 @@ import json
 from pathlib import Path
 
 import typer
+import yaml
 from rich.console import Console
 from rich.table import Table
 
@@ -46,11 +47,35 @@ app = typer.Typer()
 
 
 def _parse_tech_spec(spec: str) -> tuple[int, str]:
-    """Parse 'CODE:Name' or just 'CODE'."""
+    """Parse 'CODE:Name' or just 'CODE' (used by --tech overrides)."""
     if ":" in spec:
         code_str, name = spec.split(":", 1)
         return int(code_str), name.replace("_", " ")
     return int(spec), spec
+
+
+def _load_tech_pool(pool_path: Path) -> list[tuple[int, str]]:
+    """Load (code, name) tuples from a staples-style YAML file.
+
+    Accepts the same shape as ``data/staples/main_staple.yaml``: top-level
+    keys map to lists of ``{code, name, copies_max}`` entries. ``name`` is
+    optional and defaults to ``str(code)``.
+    """
+    data = yaml.safe_load(pool_path.read_text(encoding="utf-8"))
+    if not data:
+        return []
+    out: list[tuple[int, str]] = []
+    seen: set[int] = set()
+    for entries in data.values():
+        if not isinstance(entries, list):
+            continue
+        for e in entries:
+            code = int(e["code"])
+            if code in seen:
+                continue
+            seen.add(code)
+            out.append((code, e.get("name", str(code))))
+    return out
 
 
 def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
@@ -78,7 +103,14 @@ def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
 def main(
     baseline: Path = typer.Option(..., help="YDK file: baseline deck (last main slot is the flex slot)"),
     opponent: Path = typer.Option(..., help="YDK file: opponent deck"),
-    tech: list[str] = typer.Option(..., help="Tech card 'CODE' or 'CODE:Name', repeatable"),
+    tech_pool: Path = typer.Option(
+        Path("data/staples/main_staple.yaml"),
+        help="YAML staples file: every card in here is evaluated as a tech candidate",
+    ),
+    tech: list[str] = typer.Option(
+        None,
+        help="Optional override: 'CODE' or 'CODE:Name' (repeatable). If given, ignores --tech-pool.",
+    ),
     n_baseline: int = typer.Option(DEFAULT_N_BASELINE, help="Baseline judgments (recommended ~3√K)"),
     n_tech: int = typer.Option(DEFAULT_N_TECH, help="Per-tech-card judgments"),
     store_dir: Path = typer.Option(Path("results/judgments"), help="JudgmentStore directory"),
@@ -92,9 +124,18 @@ def main(
     base_deck = parse_ydk(baseline)
     opp_deck = parse_ydk(opponent)
 
-    tech_variants = [
-        _make_tech_variant(base_deck, *_parse_tech_spec(spec)) for spec in tech
-    ]
+    if tech:
+        tech_specs = [_parse_tech_spec(spec) for spec in tech]
+    else:
+        if not tech_pool.exists():
+            console.print(f"[red]Tech pool not found: {tech_pool}[/red]")
+            raise typer.Exit(1)
+        tech_specs = _load_tech_pool(tech_pool)
+        if not tech_specs:
+            console.print(f"[red]Tech pool {tech_pool} is empty.[/red]")
+            raise typer.Exit(1)
+        console.print(f"Loaded {len(tech_specs)} tech candidates from {tech_pool}")
+    tech_variants = [_make_tech_variant(base_deck, c, n) for c, n in tech_specs]
     K = len(tech_variants)
     total = n_baseline + n_tech * K
 
