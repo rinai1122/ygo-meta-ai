@@ -31,7 +31,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ygo_meta.deck_builder.deck_model import Deck
-from ygo_meta.deck_builder.ydk_parser import parse_ydk
+from ygo_meta.evaluator.archetype_loader import load_archetype_deck
 from ygo_meta.evaluator.delta import (
     DEFAULT_N_BASELINE,
     DEFAULT_N_TECH,
@@ -122,20 +122,12 @@ def main(
     banlist_version: str = typer.Option("unknown"),
 ) -> None:
     """Enqueue tech-card delta queries and block until a human resolves them."""
-    def _resolve(name: str) -> Path:
-        p = Path(name)
-        if p.suffix == ".ydk" and p.exists():
-            return p
-        candidate = engines_dir / name / "baseline.ydk"
-        if not candidate.exists():
-            console.print(f"[red]Could not find baseline for '{name}': {candidate} missing[/red]")
-            raise typer.Exit(1)
-        return candidate
-
-    baseline_path = _resolve(baseline)
-    opponent_path = _resolve(opponent)
-    base_deck = parse_ydk(baseline_path)
-    opp_deck = parse_ydk(opponent_path)
+    try:
+        base_deck = load_archetype_deck(baseline, engines_dir)
+        opp_deck = load_archetype_deck(opponent, engines_dir)
+    except FileNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
     if tech:
         tech_specs = [_parse_tech_spec(spec) for spec in tech]
@@ -164,8 +156,8 @@ def main(
     )
 
     console.print(f"[bold green]Tech-delta evaluation[/bold green]")
-    console.print(f"  baseline: {baseline} ({baseline_path})")
-    console.print(f"  opponent: {opponent} ({opponent_path})")
+    console.print(f"  baseline: {baseline} ({len(base_deck.main)} main)")
+    console.print(f"  opponent: {opponent} ({len(opp_deck.main)} main)")
     console.print(f"  K={K} tech cards, n_baseline={n_baseline}, n_tech={n_tech}")
     console.print(f"  total queries: {total} (newly added: {added})")
     console.print(
@@ -217,12 +209,10 @@ def main(
     console.print(table)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{baseline_path.stem}_vs_{opponent_path.stem}.json"
+    out_path = out_dir / f"{baseline}_vs_{opponent}.json"
     out_path.write_text(json.dumps({
         "baseline": baseline,
         "opponent": opponent,
-        "baseline_ydk": str(baseline_path),
-        "opponent_ydk": str(opponent_path),
         "banlist_version": banlist_version,
         "n_baseline": n_b,
         "baseline_winrate": p_b,

@@ -388,6 +388,25 @@ def test_compute_deltas_skips_unjudged_techs(tmp_path: Path) -> None:
     assert results == []
 
 
+def test_load_archetype_deck_merges_engine_and_baseline(tmp_path: Path) -> None:
+    from ygo_meta.evaluator.archetype_loader import load_archetype_deck
+
+    arch_dir = tmp_path / "TestArch"
+    arch_dir.mkdir()
+    (arch_dir / "engine.ydk").write_text(
+        "#main\n1\n2\n3\n#extra\n10\n!side\n", encoding="utf-8"
+    )
+    (arch_dir / "baseline.ydk").write_text(
+        "#main\n100\n200\n#extra\n!side\n", encoding="utf-8"
+    )
+    deck = load_archetype_deck("TestArch", tmp_path)
+    assert deck.main == [1, 2, 3, 100, 200]  # engine first, baseline last
+    assert deck.extra == [10]
+    assert deck.archetype == "TestArch"
+    # Last main slot must be from baseline (the flex slot under test).
+    assert deck.main[-1] == 200
+
+
 def test_load_tech_pool_dedups_and_handles_missing_names(tmp_path: Path) -> None:
     from ygo_meta.cli.tech_delta import _load_tech_pool
 

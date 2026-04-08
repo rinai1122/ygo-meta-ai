@@ -35,7 +35,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ygo_meta.deck_builder.deck_model import Deck
-from ygo_meta.deck_builder.ydk_parser import parse_ydk
+from ygo_meta.evaluator.archetype_loader import load_archetype_deck
 from ygo_meta.evaluator.delta import (
     DEFAULT_N_BASELINE,
     DEFAULT_N_TECH,
@@ -86,16 +86,6 @@ def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
     )
 
 
-def _resolve_baseline(name: str, engines_dir: Path) -> Path:
-    p = Path(name)
-    if p.suffix == ".ydk" and p.exists():
-        return p
-    candidate = engines_dir / name / "baseline.ydk"
-    if not candidate.exists():
-        raise FileNotFoundError(f"baseline for '{name}' not found at {candidate}")
-    return candidate
-
-
 @app.command()
 def main(
     archetypes: list[str] = typer.Option(..., help="Archetype names; resolves to <engines-dir>/<name>/baseline.ydk"),
@@ -134,9 +124,11 @@ def main(
     # Load every archetype baseline once.
     deck_by_name: dict[str, Deck] = {}
     for name in archetypes:
-        path = _resolve_baseline(name, engines_dir)
-        deck_by_name[name] = parse_ydk(path)
-    console.print(f"Loaded {len(deck_by_name)} archetype baselines: {list(deck_by_name)}")
+        deck_by_name[name] = load_archetype_deck(name, engines_dir)
+    console.print(
+        f"Loaded {len(deck_by_name)} archetype decks (engine + baseline): "
+        + ", ".join(f"{n}({len(d.main)})" for n, d in deck_by_name.items())
+    )
 
     tech_specs = _load_tech_pool(tech_pool)
     if not tech_specs:
