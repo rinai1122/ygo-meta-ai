@@ -284,16 +284,18 @@ def test_eval_server_endpoints(tmp_path: Path) -> None:
 
 
 def _make_tech_variant(baseline: Deck, code: int, name: str) -> TechVariant:
-    """Mirrors cli/tech_delta._make_tech_variant: append the tech card to the
-    (already-stripped) baseline so it lands in the flex slot under test.
+    """Mirrors cli/tech_delta._make_tech_variant: replace the baseline's last
+    main-deck slot with the candidate so the variant stays 40 cards.
     """
+    new_main = list(baseline.main)
+    new_main[-1] = code
     return TechVariant(
         name=name,
         code=code,
         deck=Deck(
             archetype=baseline.archetype,
             variant_id=f"{baseline.variant_id}+{name}",
-            main=list(baseline.main) + [code], extra=[], side=[],
+            main=new_main, extra=[], side=[],
         ),
     )
 
