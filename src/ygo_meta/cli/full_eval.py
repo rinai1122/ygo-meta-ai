@@ -109,11 +109,27 @@ def main(
     eval_server_url: str = typer.Option("http://127.0.0.1:8000"),
     banlist_version: str = typer.Option("unknown"),
     skip_phase1: bool = typer.Option(False, "--skip-phase1", help="Jump straight to phase 2 (assumes baselines are already answered)"),
+    clear: bool = typer.Option(False, "--clear", help="Wipe pending.jsonl before starting (keeps answered judgments). Use this to drop stale queries from previous runs."),
+    clear_all: bool = typer.Option(False, "--clear-all", help="Wipe BOTH pending.jsonl and judgments.jsonl. Destroys all human work — confirm before using."),
 ) -> None:
     """Two-phase full meta evaluation. Resume by simply re-running."""
     if len(archetypes) < 2:
         console.print("[red]Need at least 2 archetypes.[/red]")
         raise typer.Exit(1)
+
+    if clear_all:
+        store_dir.mkdir(parents=True, exist_ok=True)
+        for fname in ("pending.jsonl", "judgments.jsonl"):
+            p = store_dir / fname
+            if p.exists():
+                p.unlink()
+                console.print(f"[yellow]--clear-all:[/yellow] removed {p}")
+    elif clear:
+        store_dir.mkdir(parents=True, exist_ok=True)
+        p = store_dir / "pending.jsonl"
+        if p.exists():
+            p.unlink()
+            console.print(f"[yellow]--clear:[/yellow] removed {p} (answered judgments preserved)")
 
     # Load every archetype baseline once.
     deck_by_name: dict[str, Deck] = {}
