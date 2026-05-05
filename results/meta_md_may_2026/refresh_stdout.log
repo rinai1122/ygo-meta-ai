@@ -1,0 +1,10 @@
+  Running 6 matchups in 1 batch workers ...
+    [1/6] KewlTune_Sweep_MDM_2026-04-12 vs MagnetAdamancipator_YGOPRODeck_697472: 62-438
+    [2/6] KewlTune_Sweep_MDM_2026-04-12 vs RadiantSkyStriker_YGOPRODeck_706980: 337-163
+    [3/6] KewlTune_Sweep_MDM_2026-04-12 vs RyzealMitsurugi_Fuan_MDM_2026-03-07: 162-338
+    [4/6] MagnetAdamancipator_YGOPRODeck_697472 vs RadiantSkyStriker_YGOPRODeck_706980: 491-9
+    [5/6] MagnetAdamancipator_YGOPRODeck_697472 vs RyzealMitsurugi_Fuan_MDM_2026-03-07: 433-67
+    [6/6] RadiantSkyStriker_YGOPRODeck_706980 vs RyzealMitsurugi_Fuan_MDM_2026-03-07: 112-388
+saved results/meta_md_may_2026/gauntlet/payoff.npy
+saved results/meta_md_may_2026/gauntlet/deck_ids.json
+saved results/meta_md_may_2026/meta_prediction.json

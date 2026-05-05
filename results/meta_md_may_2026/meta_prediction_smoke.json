@@ -1,0 +1,23 @@
+{
+  "deck_ids": [
+    "KewlTune_Sweep_MDM_2026-04-12",
+    "MagnetAdamancipator_YGOPRODeck_697472",
+    "RadiantSkyStriker_YGOPRODeck_706980",
+    "RyzealMitsurugi_Fuan_MDM_2026-03-07"
+  ],
+  "shares": [
+    0.0,
+    1.0,
+    0.0,
+    0.0
+  ],
+  "fitnesses": [
+    0.0,
+    0.5,
+    0.0,
+    0.0
+  ],
+  "mean_fitness": 0.5,
+  "iterations": 471,
+  "converged": true
+}

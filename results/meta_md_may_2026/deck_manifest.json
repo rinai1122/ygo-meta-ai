@@ -1,0 +1,240 @@
+{
+  "banlist": "Master Duel 2026-04-01",
+  "sources": {
+    "KewlTune_Sweep_MDM_2026-04-12": {
+      "url": "https://www.masterduelmeta.com/top-decks/master-i/april-2026/kewl-tune/sweep/DkdGu",
+      "type": "mdm",
+      "main_blocks": 16
+    },
+    "RyzealMitsurugi_Fuan_MDM_2026-03-07": {
+      "url": "https://www.masterduelmeta.com/top-decks/master-v/march-2026/ryzeal-mitsurugi/fuan/5w03U",
+      "type": "mdm",
+      "main_blocks": 25
+    },
+    "RadiantSkyStriker_YGOPRODeck_706980": {
+      "url": "https://ygoprodeck.com/deck/sky-striker-md-2026-706980",
+      "type": "ygopro"
+    },
+    "MagnetAdamancipator_YGOPRODeck_697472": {
+      "url": "https://ygoprodeck.com/deck/magnet-adamancipator-697472",
+      "type": "ygopro"
+    }
+  },
+  "decks": {
+    "KewlTune_Sweep_MDM_2026-04-12": {
+      "before": {
+        "main": 40,
+        "extra": 15
+      },
+      "after": {
+        "main": 40,
+        "extra": 15
+      },
+      "repairs": [],
+      "top_main": [
+        [
+          97268402,
+          3
+        ],
+        [
+          17209452,
+          3
+        ],
+        [
+          16509007,
+          3
+        ],
+        [
+          14558128,
+          3
+        ],
+        [
+          73642297,
+          3
+        ],
+        [
+          16387555,
+          3
+        ],
+        [
+          89392810,
+          3
+        ],
+        [
+          42141493,
+          3
+        ],
+        [
+          99243014,
+          3
+        ],
+        [
+          78058681,
+          3
+        ]
+      ]
+    },
+    "RyzealMitsurugi_Fuan_MDM_2026-03-07": {
+      "before": {
+        "main": 42,
+        "extra": 15
+      },
+      "after": {
+        "main": 40,
+        "extra": 15
+      },
+      "repairs": [
+        "removed main Mitsurugi Prayers over limit 1",
+        "removed main Mitsurugi Prayers over limit 1"
+      ],
+      "top_main": [
+        [
+          14558128,
+          3
+        ],
+        [
+          42141493,
+          3
+        ],
+        [
+          8633261,
+          3
+        ],
+        [
+          13048472,
+          3
+        ],
+        [
+          81560239,
+          3
+        ],
+        [
+          40366667,
+          3
+        ],
+        [
+          40543231,
+          2
+        ],
+        [
+          19899073,
+          2
+        ],
+        [
+          13332685,
+          2
+        ],
+        [
+          23434538,
+          1
+        ]
+      ]
+    },
+    "RadiantSkyStriker_YGOPRODeck_706980": {
+      "before": {
+        "main": 40,
+        "extra": 14
+      },
+      "after": {
+        "main": 40,
+        "extra": 14
+      },
+      "repairs": [],
+      "top_main": [
+        [
+          26077387,
+          3
+        ],
+        [
+          63166095,
+          3
+        ],
+        [
+          98338152,
+          3
+        ],
+        [
+          9726840,
+          3
+        ],
+        [
+          35261759,
+          3
+        ],
+        [
+          30271097,
+          3
+        ],
+        [
+          24299458,
+          3
+        ],
+        [
+          20508881,
+          3
+        ],
+        [
+          70368879,
+          3
+        ],
+        [
+          14558128,
+          2
+        ]
+      ]
+    },
+    "MagnetAdamancipator_YGOPRODeck_697472": {
+      "before": {
+        "main": 40,
+        "extra": 15
+      },
+      "after": {
+        "main": 40,
+        "extra": 15
+      },
+      "repairs": [],
+      "top_main": [
+        [
+          79418928,
+          3
+        ],
+        [
+          87814728,
+          3
+        ],
+        [
+          85914562,
+          3
+        ],
+        [
+          11302671,
+          3
+        ],
+        [
+          54734082,
+          3
+        ],
+        [
+          65514302,
+          3
+        ],
+        [
+          4740489,
+          3
+        ],
+        [
+          72957245,
+          3
+        ],
+        [
+          44839512,
+          2
+        ],
+        [
+          24431911,
+          2
+        ]
+      ]
+    }
+  }
+}
