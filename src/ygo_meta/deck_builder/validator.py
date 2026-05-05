@@ -9,9 +9,10 @@ from __future__ import annotations
 from collections import Counter
 
 from ygo_meta.deck_builder.deck_model import Deck
+from ygo_meta.deck_builder.lflist import LFList
 
 
-def validate_deck(deck: Deck) -> list[str]:
+def validate_deck(deck: Deck, lflist: LFList | None = None) -> list[str]:
     errors: list[str] = []
 
     n_main = len(deck.main)
@@ -28,10 +29,19 @@ def validate_deck(deck: Deck) -> list[str]:
     if n_side > 15:
         errors.append(f"Side deck too large: {n_side} cards (maximum 15)")
 
-    # No card may appear more than 3 times across main + side combined
     combined = Counter(deck.main + deck.side)
     for code, count in combined.items():
         if count > 3:
             errors.append(f"Card {code} appears {count} times (maximum 3)")
+
+    if lflist is not None:
+        all_zones = Counter(deck.main + deck.extra + deck.side)
+        for code, count in all_zones.items():
+            cap = lflist.max_copies(code)
+            if count > cap:
+                errors.append(
+                    f"Card {code} appears {count} times "
+                    f"(banlist '{lflist.name}' limit: {cap})"
+                )
 
     return errors
