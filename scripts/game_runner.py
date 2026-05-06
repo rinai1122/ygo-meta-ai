@@ -25,6 +25,13 @@ from pathlib import Path
 
 import numpy as np
 
+_PROJECT_ROOT_FOR_IMPORTS = Path(__file__).resolve().parent.parent
+_SRC_FOR_IMPORTS = _PROJECT_ROOT_FOR_IMPORTS / "src"
+if _SRC_FOR_IMPORTS.exists() and str(_SRC_FOR_IMPORTS) not in sys.path:
+    sys.path.insert(0, str(_SRC_FOR_IMPORTS))
+
+from ygo_meta.simulation.obs_sanitizer import sanitize_rl_obs
+
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 # ---------------------------------------------------------------------------
@@ -182,6 +189,8 @@ def _describe_action(row: np.ndarray, cards: list, id_to_code: dict, card_names:
         return f"Declare attribute: {_ID_TO_ATTRIBUTE.get(attr_id, 'unknown').upper()}"
     if msg == "announce_number":
         return f"Declare number: {number}"
+    if msg == "announce_card":
+        return f"Declare [{card_name}]" if card_name else "Declare card"
     if msg == "select_option":
         return "Choose option"
     return f"Action ({msg}/{act})"
@@ -280,6 +289,59 @@ def format_obs_prompt(
         f"=== YOUR OPTIONS ===\n{options_block}\n\n"
         "Which action do you choose? Reply with the action number only."
     )
+
+
+def _choose_rl_action(probs: np.ndarray, num_options: int, mask: np.ndarray | None = None) -> int:
+    """Choose the best legal RL action.
+
+    The policy emits a fixed-width action vector, while the engine exposes only
+    ``num_options`` legal choices at a step.  Never argmax over the full vector:
+    clipping an out-of-range index turns unrelated invalid actions into the
+    last legal option and badly biases gameplay.
+    """
+    n = max(1, int(num_options))
+    scores = np.asarray(probs)[0, :n].astype(np.float64, copy=True)
+    if mask is not None:
+        legal = np.asarray(mask)[0, :n].astype(bool)
+        if legal.any():
+            scores[~legal] = -np.inf
+    return int(np.argmax(scores))
+
+
+_SELF_TURN_REACTIVE_HANDTRAPS = (
+    'Maxx "C"',
+    "Mulcharmy Fuwalos",
+    "Mulcharmy Purulia",
+    "Mulcharmy Meowls",
+)
+
+
+def _avoid_bad_self_turn_reactive_handtrap(
+    action: int,
+    obs: dict,
+    num_options: int,
+    id_to_code: list[int],
+    card_names: dict[int, str],
+) -> int:
+    """Avoid obvious self-turn reactive hand-trap activations when pass exists."""
+    global_arr = obs["global_"][0]
+    is_my_turn = bool(global_arr[7])
+    if not is_my_turn:
+        return action
+
+    cards = [
+        _decode_card(obs["cards_"][0][i], id_to_code, card_names)
+        for i in range(obs["cards_"][0].shape[0])
+    ]
+    chosen = _describe_action(obs["actions_"][0][action], cards, id_to_code, card_names)
+    if not any(chosen == f"Activate [{name}]" for name in _SELF_TURN_REACTIVE_HANDTRAPS):
+        return action
+
+    for i in range(num_options):
+        desc = _describe_action(obs["actions_"][0][i], cards, id_to_code, card_names)
+        if desc == "Do not activate / Pass":
+            return i
+    return action
 
 
 # ---------------------------------------------------------------------------
@@ -467,10 +529,12 @@ def main() -> None:
 
         if rl_agent is not None and to_play != args.llm_player:
             # RL agent's turn — handled in-process, no parent communication needed
-            obs_rl = {k: (v if k != 'mask_' else None) for k, v in obs.items()}
+            obs_rl = sanitize_rl_obs(obs, args.num_embeddings)
             rl_rstate, probs = get_rl_probs(rl_params, rl_rstate, obs_rl)
-            action = int(np.array(probs).argmax(axis=1)[0])
-            action = min(action, num_options - 1)
+            action = _choose_rl_action(np.array(probs), num_options, obs.get("mask_"))
+            action = _avoid_bad_self_turn_reactive_handtrap(
+                action, obs, num_options, id_to_code, card_names
+            )
         else:
             # LLM (or random) player's turn — ask parent process
             prompt = format_obs_prompt(
@@ -523,7 +587,8 @@ def _compute_token_ids(cdb_path: str, code_list_path: str) -> list[int]:
     if not cdb.exists():
         return []
     import sqlite3
-    con = sqlite3.connect(str(cdb))
+    uri = cdb.resolve().as_posix()
+    con = sqlite3.connect(f"file:{uri}?mode=ro&immutable=1", uri=True)
     token_ids = [r[0] for r in con.execute(
         "SELECT id FROM datas WHERE (type & ?) != 0", (0x4000,)
     ).fetchall()]
@@ -534,7 +599,11 @@ def _compute_token_ids(cdb_path: str, code_list_path: str) -> list[int]:
             parts = line.strip().split()
             if parts:
                 known.add(int(parts[0]))
-    return [t for t in token_ids if t in known]
+    preload_ids = [t for t in token_ids if t in known]
+    for code in (56099748,):  # Visas Starfrost; referenced by Visas-related extra deck scripts.
+        if code in known and code not in preload_ids:
+            preload_ids.append(code)
+    return preload_ids
 
 
 def _setup_deck_dir(deck_path: str, token_ids: list[int]) -> str:
@@ -728,10 +797,12 @@ def _main_batch(args) -> None:
                 )
 
             if rl_agent is not None and to_play != args.llm_player:
-                obs_rl = {k: (v if k != 'mask_' else None) for k, v in obs.items()}
+                obs_rl = sanitize_rl_obs(obs, args.num_embeddings)
                 rl_rstate, probs = get_rl_probs(rl_params, rl_rstate, obs_rl)
-                action = int(np.array(probs).argmax(axis=1)[0])
-                action = min(action, num_options - 1)
+                action = _choose_rl_action(np.array(probs), num_options, obs.get("mask_"))
+                action = _avoid_bad_self_turn_reactive_handtrap(
+                    action, obs, num_options, id_to_code, card_names
+                )
             else:
                 prompt = format_obs_prompt(
                     obs["global_"][0], obs["cards_"][0], obs["actions_"][0],

@@ -1,0 +1,29 @@
+{
+  "deck_ids": [
+    "K9Vanquishsoul",
+    "KewlTune_Sweep_MDM_2026-04-12",
+    "MagnetAdamancipator_YGOPRODeck_697472",
+    "RadiantSkyStriker_YGOPRODeck_706980",
+    "RyzealMitsurugi_Fuan_MDM_2026-03-07",
+    "SolfachordYummy"
+  ],
+  "shares": [
+    0.0,
+    0.0008857513151395159,
+    0.9991142486848605,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "fitnesses": [
+    0.26260518296867286,
+    0.4937555359457197,
+    0.5000055359457196,
+    0.03148250972022412,
+    0.20645482999162607,
+    0.031393934588710176
+  ],
+  "mean_fitness": 0.5,
+  "iterations": 20000,
+  "converged": false
+}

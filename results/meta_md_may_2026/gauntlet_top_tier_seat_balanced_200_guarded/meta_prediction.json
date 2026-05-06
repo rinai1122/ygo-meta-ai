@@ -1,0 +1,20 @@
+{
+  "deck_ids": [
+    "K9Vanquishsoul",
+    "KewlTune_Sweep_MDM_2026-04-12",
+    "RyzealMitsurugi_Fuan_MDM_2026-03-07"
+  ],
+  "shares": [
+    0.0,
+    1.0,
+    0.0
+  ],
+  "fitnesses": [
+    0.37,
+    0.5,
+    0.36250000000000004
+  ],
+  "mean_fitness": 0.5,
+  "iterations": 1807,
+  "converged": true
+}
